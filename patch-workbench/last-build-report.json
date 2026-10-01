@@ -4,14 +4,14 @@
   "officialVersion": "2.18.1",
   "officialSha256": "3c03ce352dc3c1b43f357c27ead1f73c74d198a8ded89b1b3d6a2539e7a6ac5c",
   "outputAsar": "D:\\github\\Antigravity-Chinese\\assets\\app.asar",
-  "outputSize": 5163564,
-  "outputSha256": "2e6126231669fca259304a32c5583fb9ba33513e63c41a9dc1fcc84c1779087b",
+  "outputSize": 5172439,
+  "outputSha256": "1acfd0bb1f870b26d00222d0867a2239bc35b9aebc6cbcf31318c98d812898bd",
   "compatibility": {
     "files": [
       {
         "file": "dist/preload.js",
         "officialBytes": 5151,
-        "rebuiltBytes": 425467
+        "rebuiltBytes": 434342
       },
       {
         "file": "dist/main.js",
@@ -84,7 +84,7 @@
       {
         "index": 9,
         "file": "dist/preload.js",
-        "description": "Inject in-UI branch conversation buttons, modal, shortcut, and full-featured pet (Phases 1-4: states, patrol, drag, accessories, sound, context menu) into preload",
+        "description": "Inject in-UI branch conversation buttons, modal, shortcut, and full-featured pet with micro-interactions (edge peek, afk sleep, launch push, scramble pudding drag)",
         "hits": 1
       },
       {
