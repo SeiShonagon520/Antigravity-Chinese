@@ -56,7 +56,7 @@ const replacementCode = `function scheduleSemanticUpdate() {
         allButtons.forEach(btn => {
             if (btn.closest('header') || btn.closest('aside') || btn.closest('[data-agy-surface="sidebar"]')) return;
             if (btn.closest('#antigravity\\\\.agentSidePanelInputBox') || btn.closest('[data-agy-component="composer"]')) return;
-            if (btn.closest('#agy-branch-modal') || btn.closest('#agy-composer-pet')) return;
+            if (btn.closest('#agy-branch-modal') || btn.closest('#agy-composer-pet') || btn.closest('#agy-pet-context-menu')) return;
             if (btn.classList.contains('agy-msg-branch-btn') || btn.id === 'agy-branch-btn') return;
             if (btn.closest('pre') || btn.closest('.monaco-editor') || btn.closest('code') || btn.closest('[class*="code-block"]')) return;
 
@@ -269,33 +269,138 @@ const replacementCode = `function scheduleSemanticUpdate() {
         }
     });
 
-    /* --- [AGY UI 增强 2] 对话框顶部站立小宠物 (高精第一阶段：逐帧呼吸、自然眨眼、视线追踪、急速键盘) --- */
+    /* --- [AGY UI 增强 2] 像素小宠物全功能系统 (方案一 + 方案二 + 方案三 + 方案四) --- */
     let agyCurrentPet = localStorage.getItem('agy-pet-type') || 'octopus';
+    let agyCurrentAcc = localStorage.getItem('agy-pet-acc') || 'none';
+    let agyPatrolEnabled = localStorage.getItem('agy-pet-patrol') !== 'false';
+    let agySoundEnabled = localStorage.getItem('agy-pet-sound') === 'true'; // 默认静音
+    let agyPetOffset = parseInt(localStorage.getItem('agy-pet-offset') || '28', 10);
+
     let agyPetTypingTimer = null;
     let agyIsPetBouncing = false;
     let agyIsTyping = false;
     let agyBlinkTimer = null;
+    let agyAgentState = 'IDLE'; // 'IDLE' | 'THINKING' | 'CODING' | 'SUCCESS' | 'ERROR'
+    let agyLastDetectedActive = false;
+
+    // Web Audio 原生纯净微音效合成器 (0 外部音频文件)
+    let agyAudioCtx = null;
+    function getAgyAudioContext() {
+        if (!agyAudioCtx && typeof window !== 'undefined' && (window.AudioContext || window.webkitAudioContext)) {
+            agyAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        }
+        if (agyAudioCtx && agyAudioCtx.state === 'suspended') {
+            agyAudioCtx.resume().catch(() => {});
+        }
+        return agyAudioCtx;
+    }
+
+    function playAgyPopSound() {
+        if (!agySoundEnabled) return;
+        try {
+            const ctx = getAgyAudioContext();
+            if (!ctx) return;
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(650, ctx.currentTime);
+            osc.frequency.exponentialRampToValueAtTime(1180, ctx.currentTime + 0.07);
+            gain.gain.setValueAtTime(0.12, ctx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.07);
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            osc.start();
+            osc.stop(ctx.currentTime + 0.07);
+        } catch (_) {}
+    }
+
+    function playAgySuccessSound() {
+        if (!agySoundEnabled) return;
+        try {
+            const ctx = getAgyAudioContext();
+            if (!ctx) return;
+            const now = ctx.currentTime;
+            [523.25, 659.25, 783.99, 1046.50].forEach((freq, idx) => {
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(freq, now + idx * 0.06);
+                gain.gain.setValueAtTime(0.08, now + idx * 0.06);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.06 + 0.16);
+                osc.connect(gain);
+                gain.connect(ctx.destination);
+                osc.start(now + idx * 0.06);
+                osc.stop(now + idx * 0.06 + 0.16);
+            });
+        } catch (_) {}
+    }
 
     const AGY_PET_SVGS = {
-      // 1. 原图珊瑚橙小章鱼 (含独立瞳孔、眨眼横缝与微型像素键盘)
+      // 1. 小章鱼全状态与配饰图层
       octopus: \`<svg class="agy-pixel-crisp" width="36" height="36" viewBox="0 0 18 18" fill="none" style="shape-rendering:crispEdges;image-rendering:pixelated;" xmlns="http://www.w3.org/2000/svg">
           <rect x="4" y="3" width="10" height="8" fill="#d97757" rx="0.3"/>
           <rect x="5" y="2" width="8" height="1" fill="#d97757"/>
           <rect x="3" y="5" width="12" height="5" fill="#d97757"/>
           <rect x="2" y="6" width="1" height="3" fill="#d97757"/>
           <rect x="15" y="6" width="1" height="3" fill="#d97757"/>
-          <g id="left-eye-group">
+
+          <!-- 正常双眼 -->
+          <g id="agy-normal-eyes">
             <rect id="left-pupil" class="pupil-el" x="5.2" y="5.5" width="1.6" height="1.6" fill="#18181b" style="transition:transform 0.08s ease-out;"/>
             <rect id="left-blink" class="blink-el" x="4.8" y="6" width="2.4" height="0.8" fill="#18181b" style="display:none;"/>
-          </g>
-          <g id="right-eye-group">
             <rect id="right-pupil" class="pupil-el" x="11.2" y="5.5" width="1.6" height="1.6" fill="#18181b" style="transition:transform 0.08s ease-out;"/>
             <rect id="right-blink" class="blink-el" x="10.8" y="6" width="2.4" height="0.8" fill="#18181b" style="display:none;"/>
           </g>
+
+          <!-- 完成时：星星眼 -->
+          <g id="agy-star-eyes" style="display:none;">
+            <polygon points="6,4.5 6.5,5.8 7.8,5.8 6.8,6.6 7.2,7.8 6,7 4.8,7.8 5.2,6.6 4.2,5.8 5.5,5.8" fill="#fbbf24"/>
+            <polygon points="12,4.5 12.5,5.8 13.8,5.8 12.8,6.6 13.2,7.8 12,7 10.8,7.8 11.2,6.6 10.2,5.8 11.5,5.8" fill="#fbbf24"/>
+          </g>
+
+          <!-- 报错时：蚊香眼 -->
+          <g id="agy-dizzy-eyes" style="display:none;">
+            <circle cx="6" cy="6.3" r="1.3" stroke="#18181b" stroke-width="0.8" fill="none"/>
+            <circle cx="12" cy="6.3" r="1.3" stroke="#18181b" stroke-width="0.8" fill="none"/>
+          </g>
+
+          <!-- 思考中：发光旋转齿轮 -->
+          <g id="agy-gear" style="display:none;">
+            <g class="agy-spin-gear">
+              <path d="M7 1.2 L8 0 L10 0 L11 1.2 L12.5 1.2 L13 2.5 L12 3.5 L12 5.5 L13 6.5 L12.5 7.8 L11 7.8 L10 9 L8 9 L7 7.8 L5.5 7.8 L5 6.5 L6 5.5 L6 3.5 L5 2.5 L5.5 1.2 Z" fill="#38bdf8"/>
+              <circle cx="9" cy="4.5" r="1.3" fill="#0f172a"/>
+            </g>
+          </g>
+
+          <!-- 配饰：护目镜 -->
+          <g id="agy-acc-goggles" style="display:none;">
+            <rect x="3.8" y="4.6" width="10.4" height="3" fill="#0284c7" opacity="0.9" rx="0.8"/>
+            <rect x="4.6" y="5.2" width="3.6" height="1.8" fill="#38bdf8" rx="0.4"/>
+            <rect x="9.8" y="5.2" width="3.6" height="1.8" fill="#38bdf8" rx="0.4"/>
+            <rect x="8.2" y="5.7" width="1.6" height="0.8" fill="#0369a1"/>
+          </g>
+
+          <!-- 配饰：小豆芽 -->
+          <g id="agy-acc-sprout" style="display:none;">
+            <path d="M9 2 C9 1 10.5 0.5 11.2 1 C10 1.5 9.5 2 9 2" fill="#4ade80"/>
+            <path d="M9 2 C9 1 7.5 0.5 6.8 1 C8 1.5 8.5 2 9 2" fill="#22c55e"/>
+            <rect x="8.7" y="1.8" width="0.6" height="1.2" fill="#15803d"/>
+          </g>
+
+          <!-- 配饰：咖啡杯 -->
+          <g id="agy-acc-coffee" style="display:none;">
+            <rect x="15" y="11" width="3" height="3.5" fill="#f8fafc" stroke="#64748b" stroke-width="0.5" rx="0.4"/>
+            <path class="agy-steam" d="M15.5 10.5 C15.5 9.5 16 9.5 16 8.8" stroke="#cbd5e1" stroke-width="0.5" fill="none"/>
+            <path class="agy-steam" d="M16.8 10.5 C16.8 9.5 17.3 9.5 17.3 8.8" stroke="#cbd5e1" stroke-width="0.5" fill="none" style="animation-delay:0.5s;"/>
+          </g>
+
+          <!-- 触手 -->
           <rect class="leg-el leg-odd" x="4" y="11" width="1.6" height="4" fill="#d97757"/>
           <rect class="leg-el leg-even" x="7" y="11" width="1.6" height="4" fill="#d97757"/>
           <rect class="leg-el leg-odd" x="9.5" y="11" width="1.6" height="4" fill="#d97757"/>
           <rect class="leg-el leg-even" x="12.5" y="11" width="1.6" height="4" fill="#d97757"/>
+
+          <!-- 微型小键盘 -->
           <g id="mini-kb" style="display:none;">
             <rect x="4" y="13.2" width="10" height="2" fill="#1e293b" rx="0.4"/>
             <rect x="4.8" y="13.6" width="1.4" height="1.2" fill="#38bdf8"/>
@@ -305,24 +410,58 @@ const replacementCode = `function scheduleSemanticUpdate() {
           </g>
         </svg>\`,
 
-      // 2. 线条小狗 (垂耳微动、独立瞳孔、爪子起伏)
+      // 2. 线条小狗全状态与配饰图层
       puppy: \`<svg class="agy-pixel-crisp" width="36" height="36" viewBox="0 0 18 18" fill="none" style="shape-rendering:crispEdges;image-rendering:pixelated;" xmlns="http://www.w3.org/2000/svg">
           <rect x="4" y="4" width="10" height="7.5" fill="#fdfbf7" stroke="#333" stroke-width="0.8"/>
           <rect class="puppy-ear" x="2.5" y="4" width="2" height="5.5" fill="#2d3748" rx="0.5" style="transform-origin:top center;"/>
           <rect class="puppy-ear" x="13.5" y="4" width="2" height="5.5" fill="#2d3748" rx="0.5" style="transform-origin:top center;"/>
-          <g id="left-eye-group">
+          
+          <g id="agy-normal-eyes">
             <circle id="left-pupil" class="pupil-el" cx="6.5" cy="7.2" r="0.9" fill="#2d3748" style="transition:transform 0.08s ease-out;"/>
             <rect id="left-blink" class="blink-el" x="5.5" y="7" width="2.2" height="0.8" fill="#2d3748" style="display:none;"/>
-          </g>
-          <g id="right-eye-group">
             <circle id="right-pupil" class="pupil-el" cx="11.5" cy="7.2" r="0.9" fill="#2d3748" style="transition:transform 0.08s ease-out;"/>
             <rect id="right-blink" class="blink-el" x="10.5" y="7" width="2.2" height="0.8" fill="#2d3748" style="display:none;"/>
           </g>
+
+          <g id="agy-star-eyes" style="display:none;">
+            <polygon points="6.5,5.8 7,7.1 8.3,7.1 7.3,7.9 7.7,9.1 6.5,8.3 5.3,9.1 5.7,7.9 4.7,7.1 6,7.1" fill="#fbbf24"/>
+            <polygon points="11.5,5.8 12,7.1 13.3,7.1 12.3,7.9 12.7,9.1 11.5,8.3 10.3,9.1 10.7,7.9 9.7,7.1 11,7.1" fill="#fbbf24"/>
+          </g>
+
+          <g id="agy-dizzy-eyes" style="display:none;">
+            <circle cx="6.5" cy="7.2" r="1.3" stroke="#2d3748" stroke-width="0.8" fill="none"/>
+            <circle cx="11.5" cy="7.2" r="1.3" stroke="#2d3748" stroke-width="0.8" fill="none"/>
+          </g>
+
+          <g id="agy-gear" style="display:none;">
+            <g class="agy-spin-gear">
+              <path d="M7 1.5 L8 0.3 L10 0.3 L11 1.5 L12.5 1.5 L13 2.8 L12 3.8 L12 5.8 L13 6.8 L12.5 8.1 L11 8.1 L10 9.3 L8 9.3 L7 8.1 L5.5 8.1 L5 6.8 L6 5.8 L6 3.8 L5 2.8 L5.5 1.5 Z" fill="#38bdf8"/>
+              <circle cx="9" cy="4.8" r="1.3" fill="#0f172a"/>
+            </g>
+          </g>
+
+          <g id="agy-acc-goggles" style="display:none;">
+            <rect x="3.8" y="5.5" width="10.4" height="3" fill="#0284c7" opacity="0.9" rx="0.8"/>
+            <rect x="4.8" y="6.1" width="3.6" height="1.8" fill="#38bdf8" rx="0.4"/>
+            <rect x="9.6" y="6.1" width="3.6" height="1.8" fill="#38bdf8" rx="0.4"/>
+          </g>
+
+          <g id="agy-acc-sprout" style="display:none;">
+            <path d="M9 2 C9 1 10.5 0.5 11.2 1 C10 1.5 9.5 2 9 2" fill="#4ade80"/>
+            <path d="M9 2 C9 1 7.5 0.5 6.8 1 C8 1.5 8.5 2 9 2" fill="#22c55e"/>
+            <rect x="8.7" y="1.8" width="0.6" height="1.2" fill="#15803d"/>
+          </g>
+
+          <g id="agy-acc-coffee" style="display:none;">
+            <rect x="15" y="11" width="3" height="3.5" fill="#f8fafc" stroke="#64748b" stroke-width="0.5" rx="0.4"/>
+          </g>
+
           <rect x="8.5" y="8.2" width="1" height="0.8" fill="#e53e3e" rx="0.3"/>
           <rect x="5" y="8.8" width="1.5" height="0.8" fill="#feb2b2" rx="0.4"/>
           <rect x="11.5" y="8.8" width="1.5" height="0.8" fill="#feb2b2" rx="0.4"/>
           <rect class="leg-el leg-odd" x="5" y="11.5" width="2.2" height="3.5" fill="#fdfbf7" stroke="#333" stroke-width="0.8"/>
           <rect class="leg-el leg-even" x="10.8" y="11.5" width="2.2" height="3.5" fill="#fdfbf7" stroke="#333" stroke-width="0.8"/>
+
           <g id="mini-kb" style="display:none;">
             <rect x="4" y="13.2" width="10" height="2" fill="#1e293b" rx="0.4"/>
             <rect x="5.2" y="13.6" width="1.8" height="1.2" fill="#f43f5e"/>
@@ -339,15 +478,22 @@ const replacementCode = `function scheduleSemanticUpdate() {
         style.textContent = \`
           @keyframes agy-pet-idle-subtle { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-1.5px); } }
           @keyframes agy-pet-bounce-pro { 0%, 100% { transform: translateY(0) scale(1,1); } 25% { transform: translateY(-10px) scale(0.9,1.15); } 50% { transform: translateY(-2px) scale(1.08,0.92); } 75% { transform: translateY(-5px) scale(0.96,1.04); } }
+          @keyframes agy-pet-flip-celebrate { 0% { transform: translateY(0) rotate(0deg) scale(1); } 40% { transform: translateY(-18px) rotate(-180deg) scale(1.15); } 80% { transform: translateY(-4px) rotate(-360deg) scale(1.05); } 100% { transform: translateY(0) rotate(-360deg) scale(1); } }
           @keyframes agy-heart-float-pro { 0% { opacity:0; transform:translateY(0) scale(0.6); } 25% { opacity:1; transform:translateY(-10px) scale(1.1); } 100% { opacity:0; transform:translateY(-26px) scale(1.3); } }
           @keyframes agy-leg-type-odd { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-2.2px); } }
           @keyframes agy-leg-type-even { 0%, 100% { transform: translateY(-2.2px); } 50% { transform: translateY(0); } }
           @keyframes agy-puppy-ear-perk { 0%, 100% { transform: rotate(0deg); } 50% { transform: rotate(-8deg); } }
+          @keyframes agy-spin-gear { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+          @keyframes agy-steam-rise { 0% { opacity:0; transform:translateY(0); } 50% { opacity:0.8; } 100% { opacity:0; transform:translateY(-3px); } }
+          @keyframes agy-confetti-burst { 0% { opacity:1; transform:translate(0,0) scale(1); } 100% { opacity:0; transform:translate(var(--tx),var(--ty)) scale(0.5); } }
 
           .agy-pet-idle-anim { animation: agy-pet-idle-subtle 2.8s ease-in-out infinite; }
           .agy-pet-bounce-anim { animation: agy-pet-bounce-pro 0.55s cubic-bezier(0.17, 0.89, 0.32, 1.28); }
-          .agy-typing-mode .leg-odd { animation: agy-leg-type-odd 0.14s infinite ease-in-out; }
-          .agy-typing-mode .leg-even { animation: agy-leg-type-even 0.14s infinite ease-in-out; }
+          .agy-pet-celebrate-anim { animation: agy-pet-flip-celebrate 0.85s cubic-bezier(0.2, 0.8, 0.25, 1); }
+          .agy-spin-gear { transform-origin: 9px 4.5px; animation: agy-spin-gear 1.6s linear infinite; }
+          .agy-steam { animation: agy-steam-rise 1.4s ease-out infinite; }
+          .agy-typing-mode .leg-odd, .agy-patrol-mode .leg-odd { animation: agy-leg-type-odd 0.14s infinite ease-in-out; }
+          .agy-typing-mode .leg-even, .agy-patrol-mode .leg-even { animation: agy-leg-type-even 0.14s infinite ease-in-out; }
           .agy-typing-mode .puppy-ear { animation: agy-puppy-ear-perk 0.2s infinite alternate ease-in-out; }
           .agy-pixel-crisp { image-rendering: pixelated; shape-rendering: crispEdges; }
           .agy-msg-branch-btn:hover { background: rgba(255,255,255,0.12) !important; color: #4ade80 !important; }
@@ -408,6 +554,157 @@ const replacementCode = `function scheduleSemanticUpdate() {
         return null;
     }
 
+    function applyAgyPetVisuals() {
+        const pet = document.getElementById('agy-composer-pet');
+        if (!pet) return;
+        const sprite = pet.querySelector('#agy-pet-sprite');
+        if (!sprite) return;
+
+        const gear = pet.querySelector('#agy-gear');
+        const miniKb = pet.querySelector('#mini-kb');
+        const normalEyes = pet.querySelector('#agy-normal-eyes');
+        const starEyes = pet.querySelector('#agy-star-eyes');
+        const dizzyEyes = pet.querySelector('#agy-dizzy-eyes');
+        const goggles = pet.querySelector('#agy-acc-goggles');
+        const coffee = pet.querySelector('#agy-acc-coffee');
+        const sprout = pet.querySelector('#agy-acc-sprout');
+
+        if (gear) gear.style.display = agyAgentState === 'THINKING' ? 'block' : 'none';
+        if (miniKb) miniKb.style.display = (agyIsTyping || agyAgentState === 'CODING') ? 'block' : 'none';
+        if (normalEyes) normalEyes.style.display = (agyAgentState === 'SUCCESS' || agyAgentState === 'ERROR') ? 'none' : 'block';
+        if (starEyes) starEyes.style.display = agyAgentState === 'SUCCESS' ? 'block' : 'none';
+        if (dizzyEyes) dizzyEyes.style.display = agyAgentState === 'ERROR' ? 'block' : 'none';
+
+        if (goggles) goggles.style.display = (agyCurrentAcc === 'goggles' || agyAgentState === 'CODING') ? 'block' : 'none';
+        if (coffee) coffee.style.display = agyCurrentAcc === 'coffee' ? 'block' : 'none';
+        if (sprout) sprout.style.display = agyCurrentAcc === 'sprout' ? 'block' : 'none';
+
+        if (agyAgentState === 'CODING' || agyIsTyping) {
+            sprite.classList.add('agy-typing-mode');
+        } else {
+            sprite.classList.remove('agy-typing-mode');
+        }
+    }
+
+    function triggerPetCelebration() {
+        const pet = document.getElementById('agy-composer-pet');
+        if (!pet) return;
+        const sprite = pet.querySelector('#agy-pet-sprite');
+        if (!sprite) return;
+
+        agyAgentState = 'SUCCESS';
+        applyAgyPetVisuals();
+        sprite.classList.add('agy-pet-celebrate-anim');
+        playAgySuccessSound();
+
+        // 喷发彩纸粒子
+        const confettiContainer = pet.querySelector('#agy-confetti-container');
+        if (confettiContainer) {
+            confettiContainer.innerHTML = '';
+            const colors = ['#f43f5e', '#38bdf8', '#fbbf24', '#4ade80', '#a855f7'];
+            for (let i = 0; i < 16; i++) {
+                const c = document.createElement('div');
+                const color = colors[i % colors.length];
+                const tx = (Math.random() - 0.5) * 55;
+                const ty = -14 - Math.random() * 26;
+                c.style.cssText = \`position:absolute;width:4px;height:4px;background:\${color};border-radius:1px;--tx:\${tx}px;--ty:\${ty}px;animation:agy-confetti-burst 0.85s forwards ease-out;\`;
+                confettiContainer.appendChild(c);
+            }
+            setTimeout(() => { confettiContainer.innerHTML = ''; }, 900);
+        }
+
+        showPetBubble('任务圆满完成！🎉');
+
+        setTimeout(() => {
+            sprite.classList.remove('agy-pet-celebrate-anim');
+            agyAgentState = 'IDLE';
+            applyAgyPetVisuals();
+        }, 3200);
+    }
+
+    function showPetBubble(text) {
+        const pet = document.getElementById('agy-composer-pet');
+        if (!pet) return;
+        const bubble = pet.querySelector('#agy-pet-bubble');
+        if (bubble) {
+            bubble.textContent = text;
+            bubble.style.opacity = '1';
+            bubble.style.transform = 'translateY(0)';
+            setTimeout(() => {
+                bubble.style.opacity = '0';
+                bubble.style.transform = 'translateY(3px)';
+            }, 1800);
+        }
+    }
+
+    // 状态探测循环 (监听 Stop 按钮变换与工具调用)
+    setInterval(() => {
+        const composer = findAgyComposerContainer();
+        if (!composer) return;
+
+        let isGenerating = false;
+        const stopBtn = Array.from(composer.querySelectorAll('button')).find(btn => {
+            const label = \`\${btn.getAttribute('aria-label') || ''} \${btn.getAttribute('title') || ''} \${(btn.textContent || '').trim()}\`;
+            return /停止|Stop|Cancel|取消/i.test(label) || btn.querySelector('svg [class*="stop"]');
+        });
+        if (stopBtn) isGenerating = true;
+
+        if (isGenerating && !agyLastDetectedActive) {
+            // 开始生成 / 推理
+            agyLastDetectedActive = true;
+            const isTool = document.querySelector('[class*="terminal"], [class*="task-item"], [class*="tool-call"], [class*="executing"]') !== null;
+            agyAgentState = isTool ? 'CODING' : 'THINKING';
+            applyAgyPetVisuals();
+            showPetBubble(isTool ? '全力敲代码/运行工具 🥽!' : '深入思考推理中 ⚙️...');
+        } else if (!isGenerating && agyLastDetectedActive) {
+            // 生成结束 -> 触发完成撒花！
+            agyLastDetectedActive = false;
+            triggerPetCelebration();
+        } else if (isGenerating) {
+            const isTool = document.querySelector('[class*="terminal"], [class*="task-item"], [class*="tool-call"], [class*="executing"]') !== null;
+            const targetState = isTool ? 'CODING' : 'THINKING';
+            if (agyAgentState !== targetState && agyAgentState !== 'SUCCESS') {
+                agyAgentState = targetState;
+                applyAgyPetVisuals();
+            }
+        }
+    }, 400);
+
+    // 顶边踱步巡逻循环
+    let agyPatrolDir = 1;
+    setInterval(() => {
+        if (!agyPatrolEnabled || agyIsTyping || agyAgentState !== 'IDLE') {
+            const pet = document.getElementById('agy-composer-pet');
+            if (pet) {
+                const sprite = pet.querySelector('#agy-pet-sprite');
+                if (sprite) sprite.classList.remove('agy-patrol-mode');
+            }
+            return;
+        }
+
+        const pet = document.getElementById('agy-composer-pet');
+        const composer = findAgyComposerContainer();
+        if (!pet || !composer) return;
+
+        const maxOffset = composer.clientWidth - 52;
+        agyPetOffset += agyPatrolDir * 1.3;
+
+        const sprite = pet.querySelector('#agy-pet-sprite');
+        if (agyPetOffset >= maxOffset) {
+            agyPetOffset = maxOffset;
+            agyPatrolDir = -1;
+            if (sprite) sprite.style.transform = 'scaleX(-1)';
+        } else if (agyPetOffset <= 24) {
+            agyPetOffset = 24;
+            agyPatrolDir = 1;
+            if (sprite) sprite.style.transform = 'scaleX(1)';
+        }
+
+        pet.style.right = agyPetOffset + 'px';
+        if (sprite) sprite.classList.add('agy-patrol-mode');
+    }, 50);
+
+    // 注入主逻辑
     function injectComposerPet() {
         ensureAgyPetStyles();
         const composer = findAgyComposerContainer();
@@ -423,81 +720,201 @@ const replacementCode = `function scheduleSemanticUpdate() {
 
         pet = document.createElement('div');
         pet.id = 'agy-composer-pet';
-        pet.title = agyCurrentPet === 'octopus' ? '小章鱼：戳我抚摸，双击换线条小狗~' : '线条小狗：戳我抚摸，双击换小章鱼~';
-        pet.style.cssText = 'position:absolute;bottom:100%;margin-bottom:-1px;right:24px;z-index:50;cursor:pointer;user-select:none;display:flex;flex-direction:column;align-items:center;pointer-events:auto;';
+        pet.title = '小宠物：左键抚摸/拖拽工位，右键呼出控制胶囊~';
+        pet.style.cssText = \`position:absolute;bottom:100%;margin-bottom:-1px;right:\${agyPetOffset}px;z-index:50;cursor:grab;user-select:none;display:flex;flex-direction:column;align-items:center;pointer-events:auto;\`;
 
         pet.innerHTML = \`
           <div id="agy-pet-bubble" style="position:absolute;bottom:100%;margin-bottom:6px;padding:3px 9px;border-radius:6px;background:rgba(24,28,36,0.92);border:1px solid rgba(255,255,255,0.18);color:#f1f5f9;font-size:11px;white-space:nowrap;box-shadow:0 4px 12px rgba(0,0,0,0.3);opacity:0;pointer-events:none;transition:all 0.2s ease;transform:translateY(3px);">戳我一下~</div>
           <div id="agy-heart-burst" style="position:absolute;bottom:100%;pointer-events:none;opacity:0;font-size:12px;">❤️</div>
+          <div id="agy-confetti-container" style="position:absolute;bottom:100%;pointer-events:none;"></div>
           <div id="agy-pet-sprite" class="agy-pet-idle-anim" style="transform-origin:bottom center;">
             \${AGY_PET_SVGS[agyCurrentPet] || AGY_PET_SVGS.octopus}
           </div>
         \`;
 
-        pet.addEventListener('mouseenter', () => {
-            const bubble = pet.querySelector('#agy-pet-bubble');
-            if (bubble && !agyIsPetBouncing) {
-                bubble.style.opacity = '1';
-                bubble.style.transform = 'translateY(0)';
-            }
+        // 拖拽逻辑与点击区分
+        let isDraggingPet = false;
+        let dragStartX = 0;
+        let dragStartOffset = agyPetOffset;
+        let dragMovedDistance = 0;
+
+        pet.addEventListener('mousedown', (e) => {
+            if (e.button !== 0) return; // 仅左键拖拽
+            isDraggingPet = true;
+            dragStartX = e.clientX;
+            dragStartOffset = agyPetOffset;
+            dragMovedDistance = 0;
+            pet.style.cursor = 'grabbing';
         });
-        pet.addEventListener('mouseleave', () => {
-            const bubble = pet.querySelector('#agy-pet-bubble');
-            if (bubble && !agyIsPetBouncing) {
-                bubble.style.opacity = '0';
-                bubble.style.transform = 'translateY(3px)';
+
+        window.addEventListener('mousemove', (e) => {
+            if (!isDraggingPet) return;
+            const delta = dragStartX - e.clientX;
+            dragMovedDistance += Math.abs(delta);
+            const comp = findAgyComposerContainer();
+            const maxOffset = comp ? comp.clientWidth - 50 : 300;
+            agyPetOffset = Math.max(16, Math.min(maxOffset, dragStartOffset + delta));
+            pet.style.right = agyPetOffset + 'px';
+        });
+
+        window.addEventListener('mouseup', () => {
+            if (isDraggingPet) {
+                isDraggingPet = false;
+                pet.style.cursor = 'grab';
+                localStorage.setItem('agy-pet-offset', String(Math.round(agyPetOffset)));
+                if (dragMovedDistance < 5) {
+                    // 点击抚摸
+                    handlePetClick();
+                } else {
+                    showPetBubble('新工位吸附好啦~');
+                    playAgyPopSound();
+                }
             }
         });
 
-        pet.addEventListener('click', (e) => {
-            e.stopPropagation();
+        function handlePetClick() {
             if (agyIsPetBouncing) return;
             agyIsPetBouncing = true;
             const sprite = pet.querySelector('#agy-pet-sprite');
             const heart = pet.querySelector('#agy-heart-burst');
-            const bubble = pet.querySelector('#agy-pet-bubble');
 
             sprite.className = 'agy-pet-bounce-anim';
             triggerPetBlink();
+            playAgyPopSound();
             if (heart) {
                 heart.style.animation = 'none';
                 heart.offsetHeight;
                 heart.style.animation = 'agy-heart-float-pro 0.8s forwards ease-out';
             }
-            if (bubble) {
-                const phrases = ['今天写代码超顺！', '灵感爆发啦~', '摸摸头，零Bug！', '代码写得超棒！', '哔哔~ 专注中！'];
-                bubble.textContent = phrases[Math.floor(Math.random() * phrases.length)];
-                bubble.style.opacity = '1';
-                bubble.style.transform = 'translateY(0)';
-            }
+            const phrases = ['今天写代码超顺！', '灵感爆发啦~', '摸摸头，零Bug！', '代码写得超棒！', '专注冲刺中！'];
+            showPetBubble(phrases[Math.floor(Math.random() * phrases.length)]);
 
             setTimeout(() => {
                 sprite.className = 'agy-pet-idle-anim';
                 agyIsPetBouncing = false;
-                setTimeout(() => {
-                    if (bubble) bubble.style.opacity = '0';
-                }, 1000);
             }, 550);
-        });
+        }
 
-        pet.addEventListener('dblclick', (e) => {
+        // 右键打开胶囊微菜单
+        pet.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
             e.stopPropagation();
-            agyCurrentPet = agyCurrentPet === 'octopus' ? 'puppy' : 'octopus';
-            localStorage.setItem('agy-pet-type', agyCurrentPet);
-            const sprite = pet.querySelector('#agy-pet-sprite');
-            if (sprite) sprite.innerHTML = AGY_PET_SVGS[agyCurrentPet] || AGY_PET_SVGS.octopus;
-            pet.title = agyCurrentPet === 'octopus' ? '小章鱼：戳我抚摸，双击换线条小狗~' : '线条小狗：戳我抚摸，双击换小章鱼~';
-            const bubble = pet.querySelector('#agy-pet-bubble');
-            if (bubble) {
-                bubble.textContent = agyCurrentPet === 'octopus' ? '变回小章鱼啦！' : '变身线条小狗啦！';
-                bubble.style.opacity = '1';
-                bubble.style.transform = 'translateY(0)';
-                setTimeout(() => { bubble.style.opacity = '0'; }, 1500);
-            }
+            openPetContextMenu(e.clientX, e.clientY);
         });
 
         composer.appendChild(pet);
         schedulePetBlink();
+        applyAgyPetVisuals();
+    }
+
+    /* --- 右键胶囊菜单实现 --- */
+    function ensurePetContextMenu() {
+        if (document.getElementById('agy-pet-context-menu')) return;
+        const menu = document.createElement('div');
+        menu.id = 'agy-pet-context-menu';
+        menu.style.cssText = 'position:fixed;background:rgba(20,24,33,0.96);backdrop-filter:blur(10px);border:1px solid rgba(255,255,255,0.16);border-radius:12px;padding:10px 12px;box-shadow:0 16px 40px rgba(0,0,0,0.55);font-size:12px;color:#f1f5f9;z-index:2147483647;display:none;flex-direction:column;gap:8px;width:196px;font-family:-apple-system,BlinkMacSystemFont,sans-serif;';
+        
+        menu.innerHTML = \`
+          <div style="display:flex;align-items:center;justify-content:between;border-bottom:1px solid rgba(255,255,255,0.1);padding-bottom:6px;font-size:11px;font-weight:600;color:#94a3b8;">
+            <span>🐾 宠物控制胶囊</span>
+            <span style="color:#4ade80;font-size:10px;margin-left:auto;">PRO</span>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:4px;">
+            <label style="font-size:10px;color:#94a3b8;">形态选择：</label>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;">
+              <button id="menu-btn-oct" style="padding:4px 6px;border-radius:6px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);color:#fff;cursor:pointer;font-size:11px;">🐙 小章鱼</button>
+              <button id="menu-btn-pup" style="padding:4px 6px;border-radius:6px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);color:#fff;cursor:pointer;font-size:11px;">🐶 线条狗</button>
+            </div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:4px;border-top:1px solid rgba(255,255,255,0.08);padding-top:6px;">
+            <label style="font-size:10px;color:#94a3b8;">配饰切换：</label>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;">
+              <button id="menu-acc-none" style="padding:3px 5px;border-radius:6px;background:rgba(255,255,255,0.05);border:none;color:#cbd5e1;cursor:pointer;font-size:10px;">🚫 无</button>
+              <button id="menu-acc-gog" style="padding:3px 5px;border-radius:6px;background:rgba(255,255,255,0.05);border:none;color:#cbd5e1;cursor:pointer;font-size:10px;">🥽 护目镜</button>
+              <button id="menu-acc-cof" style="padding:3px 5px;border-radius:6px;background:rgba(255,255,255,0.05);border:none;color:#cbd5e1;cursor:pointer;font-size:10px;">☕ 咖啡杯</button>
+              <button id="menu-acc-spr" style="padding:3px 5px;border-radius:6px;background:rgba(255,255,255,0.05);border:none;color:#cbd5e1;cursor:pointer;font-size:10px;">🌱 小豆芽</button>
+            </div>
+          </div>
+          <div style="display:flex;align-items:center;justify-content:space-between;border-top:1px solid rgba(255,255,255,0.08);padding-top:6px;">
+            <span style="font-size:11px;color:#cbd5e1;">🚶 顶边漫步</span>
+            <button id="menu-patrol-btn" style="padding:2px 8px;border-radius:6px;border:none;background:rgba(74,222,128,0.2);color:#4ade80;cursor:pointer;font-size:10px;font-weight:600;">\${agyPatrolEnabled ? '开启中' : '已停用'}</button>
+          </div>
+          <div style="display:flex;align-items:center;justify-content:space-between;border-top:1px solid rgba(255,255,255,0.08);padding-top:6px;">
+            <span style="font-size:11px;color:#cbd5e1;">🔊 治愈音效</span>
+            <button id="menu-sound-btn" style="padding:2px 8px;border-radius:6px;border:none;background:rgba(255,255,255,0.1);color:#94a3b8;cursor:pointer;font-size:10px;font-weight:600;">\${agySoundEnabled ? '已开启' : '已静音'}</button>
+          </div>
+        \`;
+
+        document.body.appendChild(menu);
+
+        menu.querySelector('#menu-btn-oct').onclick = () => { changePetShape('octopus'); closePetContextMenu(); };
+        menu.querySelector('#menu-btn-pup').onclick = () => { changePetShape('puppy'); closePetContextMenu(); };
+        menu.querySelector('#menu-acc-none').onclick = () => { changePetAcc('none'); closePetContextMenu(); };
+        menu.querySelector('#menu-acc-gog').onclick = () => { changePetAcc('goggles'); closePetContextMenu(); };
+        menu.querySelector('#menu-acc-cof').onclick = () => { changePetAcc('coffee'); closePetContextMenu(); };
+        menu.querySelector('#menu-acc-spr').onclick = () => { changePetAcc('sprout'); closePetContextMenu(); };
+
+        const patrolBtn = menu.querySelector('#menu-patrol-btn');
+        patrolBtn.onclick = () => {
+            agyPatrolEnabled = !agyPatrolEnabled;
+            localStorage.setItem('agy-pet-patrol', String(agyPatrolEnabled));
+            patrolBtn.textContent = agyPatrolEnabled ? '开启中' : '已停用';
+            patrolBtn.style.color = agyPatrolEnabled ? '#4ade80' : '#94a3b8';
+            patrolBtn.style.background = agyPatrolEnabled ? 'rgba(74,222,128,0.2)' : 'rgba(255,255,255,0.1)';
+            showPetBubble(agyPatrolEnabled ? '已开启顶边巡逻漫步~' : '已停用漫步，原地休息~');
+            closePetContextMenu();
+        };
+
+        const soundBtn = menu.querySelector('#menu-sound-btn');
+        soundBtn.onclick = () => {
+            agySoundEnabled = !agySoundEnabled;
+            localStorage.setItem('agy-pet-sound', String(agySoundEnabled));
+            soundBtn.textContent = agySoundEnabled ? '已开启' : '已静音';
+            soundBtn.style.color = agySoundEnabled ? '#4ade80' : '#94a3b8';
+            soundBtn.style.background = agySoundEnabled ? 'rgba(74,222,128,0.2)' : 'rgba(255,255,255,0.1)';
+            if (agySoundEnabled) playAgyPopSound();
+            showPetBubble(agySoundEnabled ? '治愈微音效已开启 🔊' : '音效已静音 🔇');
+            closePetContextMenu();
+        };
+    }
+
+    function openPetContextMenu(x, y) {
+        ensurePetContextMenu();
+        const menu = document.getElementById('agy-pet-context-menu');
+        if (!menu) return;
+        menu.style.left = Math.min(window.innerWidth - 210, Math.max(10, x - 10)) + 'px';
+        menu.style.top = Math.max(10, y - 220) + 'px';
+        menu.style.display = 'flex';
+    }
+
+    function closePetContextMenu() {
+        const menu = document.getElementById('agy-pet-context-menu');
+        if (menu) menu.style.display = 'none';
+    }
+
+    window.addEventListener('click', (e) => {
+        if (!e.target.closest('#agy-pet-context-menu')) closePetContextMenu();
+    });
+
+    function changePetShape(type) {
+        agyCurrentPet = type;
+        localStorage.setItem('agy-pet-type', type);
+        const pet = document.getElementById('agy-composer-pet');
+        if (pet) {
+            const sprite = pet.querySelector('#agy-pet-sprite');
+            if (sprite) sprite.innerHTML = AGY_PET_SVGS[type] || AGY_PET_SVGS.octopus;
+            applyAgyPetVisuals();
+            playAgyPopSound();
+            showPetBubble('形态变身：' + (type === 'octopus' ? '小章鱼 🐙' : '线条小狗 🐶'));
+        }
+    }
+
+    function changePetAcc(acc) {
+        agyCurrentAcc = acc;
+        localStorage.setItem('agy-pet-acc', acc);
+        applyAgyPetVisuals();
+        playAgyPopSound();
+        showPetBubble('配饰更换：' + (acc === 'none' ? '原汁原味' : acc));
     }
 
     /* --- 视线随鼠标光标动态追踪 --- */
@@ -521,7 +938,7 @@ const replacementCode = `function scheduleSemanticUpdate() {
         });
     });
 
-    /* --- 打字状态：触手狂飙敲击微型键盘 + 低头看输入框 --- */
+    /* --- 打字状态：触手敲键盘 + 低头看输入框 --- */
     window.addEventListener('input', (e) => {
         const tag = (e.target && e.target.tagName) || '';
         if (tag === 'TEXTAREA' || tag === 'INPUT' || (e.target && e.target.isContentEditable)) {
@@ -535,7 +952,6 @@ const replacementCode = `function scheduleSemanticUpdate() {
             sprite.classList.add('agy-typing-mode');
             if (miniKb) miniKb.style.display = 'block';
 
-            // 视线专注看输入框
             const pupils = pet.querySelectorAll('.pupil-el');
             pupils.forEach(p => {
                 p.style.transform = 'translate(0px, 0.8px)';
@@ -553,8 +969,8 @@ const replacementCode = `function scheduleSemanticUpdate() {
     }, true);`;
 
 // Rule 9 is the last rule
-rules[rules.length - 1].description = 'Inject in-UI branch conversation buttons, modal, shortcut, and high-fidelity Phase 1 pet (blink, eye-tracking, keyboard typing) into preload';
+rules[rules.length - 1].description = 'Inject in-UI branch conversation buttons, modal, shortcut, and full-featured pet (Phases 1-4: states, patrol, drag, accessories, sound, context menu) into preload';
 rules[rules.length - 1].replace = replacementCode;
 
 fs.writeFileSync(rulesPath, JSON.stringify(rules, null, 2) + '\n', 'utf8');
-console.log('Successfully updated runtime-rules.json with Phase 1 pet details!');
+console.log('Successfully updated runtime-rules.json with full-featured Phases 1-4 pet system!');
