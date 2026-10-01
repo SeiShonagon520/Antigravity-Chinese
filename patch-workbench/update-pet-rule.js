@@ -364,14 +364,6 @@ const replacementCode = `function scheduleSemanticUpdate() {
             <circle cx="12" cy="6.3" r="1.3" stroke="#18181b" stroke-width="0.8" fill="none"/>
           </g>
 
-          <!-- 思考中：发光旋转齿轮 -->
-          <g id="agy-gear" style="display:none;">
-            <g class="agy-spin-gear">
-              <path d="M7 1.2 L8 0 L10 0 L11 1.2 L12.5 1.2 L13 2.5 L12 3.5 L12 5.5 L13 6.5 L12.5 7.8 L11 7.8 L10 9 L8 9 L7 7.8 L5.5 7.8 L5 6.5 L6 5.5 L6 3.5 L5 2.5 L5.5 1.2 Z" fill="#38bdf8"/>
-              <circle cx="9" cy="4.5" r="1.3" fill="#0f172a"/>
-            </g>
-          </g>
-
           <!-- 配饰：护目镜 -->
           <g id="agy-acc-goggles" style="display:none;">
             <rect x="3.8" y="4.6" width="10.4" height="3" fill="#0284c7" opacity="0.9" rx="0.8"/>
@@ -433,13 +425,6 @@ const replacementCode = `function scheduleSemanticUpdate() {
             <circle cx="11.5" cy="7.2" r="1.3" stroke="#2d3748" stroke-width="0.8" fill="none"/>
           </g>
 
-          <g id="agy-gear" style="display:none;">
-            <g class="agy-spin-gear">
-              <path d="M7 1.5 L8 0.3 L10 0.3 L11 1.5 L12.5 1.5 L13 2.8 L12 3.8 L12 5.8 L13 6.8 L12.5 8.1 L11 8.1 L10 9.3 L8 9.3 L7 8.1 L5.5 8.1 L5 6.8 L6 5.8 L6 3.8 L5 2.8 L5.5 1.5 Z" fill="#38bdf8"/>
-              <circle cx="9" cy="4.8" r="1.3" fill="#0f172a"/>
-            </g>
-          </g>
-
           <g id="agy-acc-goggles" style="display:none;">
             <rect x="3.8" y="5.5" width="10.4" height="3" fill="#0284c7" opacity="0.9" rx="0.8"/>
             <rect x="4.8" y="6.1" width="3.6" height="1.8" fill="#38bdf8" rx="0.4"/>
@@ -480,6 +465,7 @@ const replacementCode = `function scheduleSemanticUpdate() {
           @keyframes agy-pet-bounce-pro { 0%, 100% { transform: translateY(0) scale(1,1); } 25% { transform: translateY(-10px) scale(0.9,1.15); } 50% { transform: translateY(-2px) scale(1.08,0.92); } 75% { transform: translateY(-5px) scale(0.96,1.04); } }
           @keyframes agy-pet-flip-celebrate { 0% { transform: translateY(0) rotate(0deg) scale(1); } 40% { transform: translateY(-18px) rotate(-180deg) scale(1.15); } 80% { transform: translateY(-4px) rotate(-360deg) scale(1.05); } 100% { transform: translateY(0) rotate(-360deg) scale(1); } }
           @keyframes agy-heart-float-pro { 0% { opacity:0; transform:translateY(0) scale(0.6); } 25% { opacity:1; transform:translateY(-10px) scale(1.1); } 100% { opacity:0; transform:translateY(-26px) scale(1.3); } }
+          @keyframes agy-thought-float-anim { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-3px); } }
           @keyframes agy-leg-type-odd { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-2.2px); } }
           @keyframes agy-leg-type-even { 0%, 100% { transform: translateY(-2.2px); } 50% { transform: translateY(0); } }
           @keyframes agy-puppy-ear-perk { 0%, 100% { transform: rotate(0deg); } 50% { transform: rotate(-8deg); } }
@@ -490,7 +476,8 @@ const replacementCode = `function scheduleSemanticUpdate() {
           .agy-pet-idle-anim { animation: agy-pet-idle-subtle 2.8s ease-in-out infinite; }
           .agy-pet-bounce-anim { animation: agy-pet-bounce-pro 0.55s cubic-bezier(0.17, 0.89, 0.32, 1.28); }
           .agy-pet-celebrate-anim { animation: agy-pet-flip-celebrate 0.85s cubic-bezier(0.2, 0.8, 0.25, 1); }
-          .agy-spin-gear { transform-origin: 9px 4.5px; animation: agy-spin-gear 1.6s linear infinite; }
+          .agy-thought-float { animation: agy-thought-float-anim 2.2s ease-in-out infinite; }
+          .agy-spin-gear { transform-origin: 6px 6px; animation: agy-spin-gear 1.8s linear infinite; }
           .agy-steam { animation: agy-steam-rise 1.4s ease-out infinite; }
           .agy-typing-mode .leg-odd, .agy-patrol-mode .leg-odd { animation: agy-leg-type-odd 0.14s infinite ease-in-out; }
           .agy-typing-mode .leg-even, .agy-patrol-mode .leg-even { animation: agy-leg-type-even 0.14s infinite ease-in-out; }
@@ -560,7 +547,7 @@ const replacementCode = `function scheduleSemanticUpdate() {
         const sprite = pet.querySelector('#agy-pet-sprite');
         if (!sprite) return;
 
-        const gear = pet.querySelector('#agy-gear');
+        const thinkingBubble = pet.querySelector('#agy-thinking-bubble');
         const miniKb = pet.querySelector('#mini-kb');
         const normalEyes = pet.querySelector('#agy-normal-eyes');
         const starEyes = pet.querySelector('#agy-star-eyes');
@@ -568,8 +555,18 @@ const replacementCode = `function scheduleSemanticUpdate() {
         const goggles = pet.querySelector('#agy-acc-goggles');
         const coffee = pet.querySelector('#agy-acc-coffee');
         const sprout = pet.querySelector('#agy-acc-sprout');
+        const pupils = pet.querySelectorAll('.pupil-el');
 
-        if (gear) gear.style.display = agyAgentState === 'THINKING' ? 'block' : 'none';
+        if (thinkingBubble) {
+            thinkingBubble.style.display = agyAgentState === 'THINKING' ? 'flex' : 'none';
+        }
+
+        if (agyAgentState === 'THINKING') {
+            pupils.forEach(p => p.style.transform = 'translate(0.3px, -0.9px)');
+        } else if (agyAgentState !== 'CODING' && !agyIsTyping) {
+            pupils.forEach(p => p.style.transform = 'translate(0, 0)');
+        }
+
         if (miniKb) miniKb.style.display = (agyIsTyping || agyAgentState === 'CODING') ? 'block' : 'none';
         if (normalEyes) normalEyes.style.display = (agyAgentState === 'SUCCESS' || agyAgentState === 'ERROR') ? 'none' : 'block';
         if (starEyes) starEyes.style.display = agyAgentState === 'SUCCESS' ? 'block' : 'none';
@@ -655,7 +652,9 @@ const replacementCode = `function scheduleSemanticUpdate() {
             const isTool = document.querySelector('[class*="terminal"], [class*="task-item"], [class*="tool-call"], [class*="executing"]') !== null;
             agyAgentState = isTool ? 'CODING' : 'THINKING';
             applyAgyPetVisuals();
-            showPetBubble(isTool ? '全力敲代码/运行工具 🥽!' : '深入思考推理中 ⚙️...');
+            if (isTool) {
+                showPetBubble('全力敲代码/运行工具 🥽!');
+            }
         } else if (!isGenerating && agyLastDetectedActive) {
             // 生成结束 -> 触发完成撒花！
             agyLastDetectedActive = false;
@@ -724,6 +723,18 @@ const replacementCode = `function scheduleSemanticUpdate() {
         pet.style.cssText = \`position:absolute;bottom:100%;margin-bottom:-1px;right:\${agyPetOffset}px;z-index:50;cursor:grab;user-select:none;display:flex;flex-direction:column;align-items:center;pointer-events:auto;\`;
 
         pet.innerHTML = \`
+          <!-- ✨ 头顶悬浮思考云 (完全独立悬浮在头顶上方，绝不遮挡脸部与眼睛) -->
+          <div id="agy-thinking-bubble" class="agy-thought-float" style="position:absolute;bottom:38px;right:-8px;z-index:55;pointer-events:none;display:none;flex-direction:column;align-items:flex-end;">
+            <div style="background:rgba(15,23,42,0.92);border:1px solid rgba(56,189,248,0.5);border-radius:9999px;padding:2px 7px;box-shadow:0 4px 12px rgba(0,0,0,0.35);display:flex;align-items:center;gap:4px;backdrop-filter:blur(4px);">
+              <svg width="12" height="12" viewBox="0 0 12 12" fill="none" class="agy-spin-gear">
+                <path d="M5 0.8 L6 0 L7 0 L8 0.8 L9.2 0.8 L9.6 1.8 L8.8 2.6 L9.2 3.8 L10.4 4.2 L10.4 5 L9.2 5.4 L8.8 6.6 L9.6 7.4 L9.2 8.4 L8 8.4 L7 9.2 L6 9.2 L5 8.4 L3.8 8.4 L3.4 7.4 L4.2 6.6 L3.8 5.4 L2.6 5 L2.6 4.2 L3.8 3.8 L4.2 2.6 L3.4 1.8 L3.8 0.8 L5 0.8 Z" fill="#38bdf8"/>
+                <circle cx="6" cy="4.6" r="1.2" fill="#0f172a"/>
+              </svg>
+              <span style="font-size:10px;color:#7dd3fc;font-weight:600;letter-spacing:-0.2px;white-space:nowrap;">思考中...</span>
+            </div>
+            <div style="width:6px;height:6px;border-radius:50%;background:rgba(56,189,248,0.75);margin-top:2px;margin-right:12px;"></div>
+            <div style="width:4px;height:4px;border-radius:50%;background:rgba(56,189,248,0.5);margin-top:2px;margin-right:18px;"></div>
+          </div>
           <div id="agy-pet-bubble" style="position:absolute;bottom:100%;margin-bottom:6px;padding:3px 9px;border-radius:6px;background:rgba(24,28,36,0.92);border:1px solid rgba(255,255,255,0.18);color:#f1f5f9;font-size:11px;white-space:nowrap;box-shadow:0 4px 12px rgba(0,0,0,0.3);opacity:0;pointer-events:none;transition:all 0.2s ease;transform:translateY(3px);">戳我一下~</div>
           <div id="agy-heart-burst" style="position:absolute;bottom:100%;pointer-events:none;opacity:0;font-size:12px;">❤️</div>
           <div id="agy-confetti-container" style="position:absolute;bottom:100%;pointer-events:none;"></div>
@@ -919,7 +930,7 @@ const replacementCode = `function scheduleSemanticUpdate() {
 
     /* --- 视线随鼠标光标动态追踪 --- */
     window.addEventListener('mousemove', (e) => {
-        if (agyIsTyping) return;
+        if (agyIsTyping || agyAgentState === 'THINKING') return;
         const pet = document.getElementById('agy-composer-pet');
         if (!pet) return;
         const rect = pet.getBoundingClientRect();
