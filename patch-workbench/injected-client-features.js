@@ -631,6 +631,25 @@ function ensureAgyPetStyles() {
       .agy-pixel-crisp { image-rendering: pixelated; shape-rendering: crispEdges; }
       .agy-msg-branch-btn:hover { background: rgba(255,255,255,0.12) !important; color: #4ade80 !important; }
       [data-agy-component="composer"], #antigravity\\.agentSidePanelInputBox { overflow: visible !important; }
+
+      /* 🧪 方案 B：复古游戏风 · 魔力药水试管 / 温度计额度 HUD */
+      @keyframes agy-mana-bubble-anim {
+        0% { transform: translateY(0) scale(0.6); opacity: 0; }
+        40% { opacity: 0.85; }
+        100% { transform: translateY(-16px) scale(1.1); opacity: 0; }
+      }
+      @keyframes agy-mana-vial-glow {
+        0%, 100% { filter: drop-shadow(0 0 2px rgba(56, 189, 248, 0.4)); }
+        50% { filter: drop-shadow(0 0 6px rgba(56, 189, 248, 0.8)); }
+      }
+      @keyframes agy-mana-vial-pop {
+        0% { opacity: 0; transform: translateY(6px) scale(0.7); }
+        70% { opacity: 1; transform: translateY(-2px) scale(1.05); }
+        100% { opacity: 1; transform: translateY(0) scale(1); }
+      }
+      .agy-mana-bubble-1 { animation: agy-mana-bubble-anim 1.8s infinite ease-in; }
+      .agy-mana-bubble-2 { animation: agy-mana-bubble-anim 2.2s 0.9s infinite ease-in; }
+      .agy-mana-vial-visible { animation: agy-mana-vial-pop 0.24s cubic-bezier(0.18, 0.89, 0.32, 1.28) forwards; }
     `;
     document.head.appendChild(style);
 }
@@ -1057,6 +1076,38 @@ function injectComposerPet() {
       <div id="agy-heart-burst" style="position:absolute;bottom:100%;pointer-events:none;opacity:0;font-size:12px;">❤️</div>
       <div id="agy-confetti-container" style="position:absolute;bottom:12px;left:50%;transform:translateX(-50%);pointer-events:none;width:0;height:0;z-index:58;"></div>
       <div id="agy-celebrate-badge" class="agy-celebrate-badge" style="position:absolute;bottom:42px;white-space:nowrap;padding:3px 10px;border-radius:9999px;background:rgba(15,23,42,0.95);border:1px solid rgba(74,222,128,0.55);color:#4ade80;font-size:11px;font-weight:600;box-shadow:0 6px 18px rgba(0,0,0,0.4),0 0 12px rgba(74,222,128,0.25);pointer-events:none;z-index:60;display:none;align-items:center;gap:4px;"><span>✨ 任务圆满达成！🎉</span></div>
+
+      <!-- 🧪 方案 B：复古游戏风 ·「魔力药水试管/温度计」额度 HUD (pointer-events: none) -->
+      <div id="agy-pet-mana-hud" class="agy-pet-mana-hud" style="position:absolute;bottom:42px;right:-18px;pointer-events:none;display:none;align-items:flex-end;gap:6px;z-index:57;opacity:0;transition:all 0.2s ease;transform:translateY(4px) scale(0.95);">
+        <!-- 像素魔力试管 (宽12px, 高28px) -->
+        <div id="agy-mana-vial-box" style="display:flex;flex-direction:column;align-items:center;">
+          <!-- 软木塞 -->
+          <div style="width:10px;height:4px;background:#b45309;border-top-left-radius:2px;border-top-right-radius:2px;border:1px solid #78350f;box-shadow:0 1px 2px rgba(0,0,0,0.3);"></div>
+          <!-- 玻璃试管身 -->
+          <div style="position:relative;width:12px;height:28px;background:rgba(15,23,42,0.85);border:1px solid rgba(148,163,184,0.6);border-bottom-left-radius:6px;border-bottom-right-radius:6px;overflow:hidden;backdrop-filter:blur(4px);display:flex;flex-direction:column;justify-content:flex-end;padding:2px;box-shadow:0 2px 8px rgba(0,0,0,0.4);">
+            <!-- 内部药水液面 -->
+            <div id="agy-mana-liquid-fill" style="width:100%;height:85%;background:#38bdf8;border-bottom-left-radius:4px;border-bottom-right-radius:4px;transition:all 0.3s ease;position:relative;box-shadow:0 0 8px rgba(56,189,248,0.7);">
+              <!-- 液面微波浪 -->
+              <div id="agy-mana-wave-surface" style="position:absolute;top:-2px;left:0;right:0;height:4px;background:rgba(125,211,252,0.9);border-radius:9999px;"></div>
+              <!-- 上浮微气泡 -->
+              <div class="agy-mana-bubble-1" style="position:absolute;width:4px;height:4px;background:rgba(255,255,255,0.8);border-radius:50%;left:2px;bottom:4px;"></div>
+              <div class="agy-mana-bubble-2" style="position:absolute;width:3px;height:3px;background:rgba(255,255,255,0.7);border-radius:50%;right:2px;bottom:8px;"></div>
+            </div>
+            <!-- 玻璃左侧高光条 -->
+            <div style="position:absolute;top:2px;left:2px;bottom:2px;width:2px;background:rgba(255,255,255,0.3);border-radius:9999px;pointer-events:none;"></div>
+          </div>
+        </div>
+
+        <!-- 伴随像素信息卡片 -->
+        <div id="agy-mana-info-card" style="background:rgba(15,23,42,0.95);border:1px solid rgba(56,189,248,0.45);border-radius:8px;padding:3px 8px;box-shadow:0 6px 18px rgba(0,0,0,0.45);backdrop-filter:blur(6px);display:flex;flex-direction:column;gap:2px;white-space:nowrap;">
+          <div style="display:flex;align-items:center;gap:6px;">
+            <span id="agy-mana-pct-text" style="font-size:10px;color:#38bdf8;font-weight:700;letter-spacing:-0.2px;">✨ Gemini 85%</span>
+            <span id="agy-mana-badge-label" style="font-size:9px;padding:1px 4px;border-radius:4px;background:rgba(56,189,248,0.2);color:#38bdf8;border:1px solid rgba(56,189,248,0.35);font-family:monospace;">5h</span>
+          </div>
+          <div id="agy-mana-reset-text" style="font-size:9px;color:rgba(203,213,225,0.85);font-family:monospace;">⏳ 2h 15m 后回满</div>
+        </div>
+      </div>
+
       <div id="agy-pet-flipper" style="transform-origin:bottom center;transition:transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);transform:${agyPatrolDir === 1 ? 'scaleX(1)' : 'scaleX(-1)'};">
         <div id="agy-pet-sprite" class="agy-pet-idle-anim" style="transform-origin:bottom center;">
           ${AGY_PET_SVGS[agyCurrentPet] || AGY_PET_SVGS.octopus}
@@ -1064,12 +1115,173 @@ function injectComposerPet() {
       </div>
     `;
 
+    // 🧪 方案 B：复古游戏风 · 魔力药水试管 / 温度计额度 HUD 控制器
+    let agyManaHoverTimer = null;
+    let agyIsManaHudShown = false;
+    let agyCachedQuota = null;
+    let agyQuotaCacheTime = 0;
+    let agyIsFetchingQuota = false;
+
+    async function fetchAgyCurrentQuota() {
+        const now = Date.now();
+        if (agyCachedQuota && (now - agyQuotaCacheTime < 60000)) {
+            return agyCachedQuota;
+        }
+        if (agyIsFetchingQuota) return agyCachedQuota;
+        agyIsFetchingQuota = true;
+        try {
+            if (typeof electron_1 !== 'undefined' && electron_1.ipcRenderer) {
+                const accRes = await electron_1.ipcRenderer.invoke('accounts:list');
+                const currentId = accRes ? accRes.currentAccountId : null;
+                if (currentId) {
+                    const qRes = await electron_1.ipcRenderer.invoke('fetch-account-quota', currentId);
+                    if (qRes && qRes.success && qRes.quota) {
+                        agyCachedQuota = qRes.quota;
+                        agyQuotaCacheTime = Date.now();
+                        try {
+                            localStorage.setItem('agy-last-known-quota', JSON.stringify(agyCachedQuota));
+                        } catch (_) {}
+                        return agyCachedQuota;
+                    }
+                }
+            }
+        } catch (_) {} finally {
+            agyIsFetchingQuota = false;
+        }
+        if (!agyCachedQuota) {
+            try {
+                const saved = localStorage.getItem('agy-last-known-quota');
+                if (saved) agyCachedQuota = JSON.parse(saved);
+            } catch (_) {}
+        }
+        return agyCachedQuota;
+    }
+
+    function formatAgyResetCountdown(isoStr) {
+        if (!isoStr) return '';
+        try {
+            const target = new Date(isoStr);
+            const now = new Date();
+            const diffMs = target - now;
+            if (diffMs <= 0) return '';
+            const diffMins = Math.round(diffMs / 60000);
+            if (diffMins < 60) return `${diffMins}m`;
+            const diffHours = Math.floor(diffMins / 60);
+            const remMins = diffMins % 60;
+            if (diffHours < 24) return `${diffHours}h ${remMins}m`;
+            const diffDays = Math.floor(diffHours / 24);
+            const remHours = diffHours % 24;
+            return `${diffDays}d ${remHours}h`;
+        } catch (_) { return ''; }
+    }
+
+    function updateAgyManaHudVisuals(quotaData) {
+        const fill = pet.querySelector('#agy-mana-liquid-fill');
+        const wave = pet.querySelector('#agy-mana-wave-surface');
+        const pctText = pet.querySelector('#agy-mana-pct-text');
+        const resetText = pet.querySelector('#agy-mana-reset-text');
+        const badge = pet.querySelector('#agy-mana-badge-label');
+        const infoCard = pet.querySelector('#agy-mana-info-card');
+        if (!fill || !pctText) return;
+
+        let pct = 85;
+        let resetCountdown = '';
+        if (quotaData && quotaData.gemini5h) {
+            const num = parseInt(quotaData.gemini5h, 10);
+            if (!isNaN(num)) pct = num;
+            if (quotaData.gemini5hReset) {
+                resetCountdown = formatAgyResetCountdown(quotaData.gemini5hReset);
+            }
+        }
+
+        fill.style.height = `${pct}%`;
+        if (pct >= 50) {
+            fill.style.background = '#38bdf8';
+            fill.style.boxShadow = '0 0 8px rgba(56, 189, 248, 0.7)';
+            if (wave) wave.style.background = 'rgba(125, 211, 252, 0.9)';
+            if (pctText) { pctText.style.color = '#38bdf8'; pctText.textContent = `✨ Gemini ${pct}%`; }
+            if (badge) { badge.style.color = '#38bdf8'; badge.style.background = 'rgba(56, 189, 248, 0.2)'; badge.textContent = '5h'; }
+            if (infoCard) infoCard.style.borderColor = 'rgba(56, 189, 248, 0.4)';
+        } else if (pct >= 20) {
+            fill.style.background = '#fbbf24';
+            fill.style.boxShadow = '0 0 8px rgba(251, 191, 36, 0.7)';
+            if (wave) wave.style.background = 'rgba(253, 230, 138, 0.9)';
+            if (pctText) { pctText.style.color = '#fbbf24'; pctText.textContent = `⚡ Gemini ${pct}%`; }
+            if (badge) { badge.style.color = '#fbbf24'; badge.style.background = 'rgba(251, 191, 36, 0.2)'; badge.textContent = '5h 适中'; }
+            if (infoCard) infoCard.style.borderColor = 'rgba(251, 191, 36, 0.4)';
+        } else {
+            fill.style.background = '#f43f5e';
+            fill.style.boxShadow = '0 0 8px rgba(244, 63, 94, 0.7)';
+            if (wave) wave.style.background = 'rgba(253, 164, 175, 0.9)';
+            if (pctText) { pctText.style.color = '#f43f5e'; pctText.textContent = `⚠️ Gemini ${pct}%`; }
+            if (badge) { badge.style.color = '#f43f5e'; badge.style.background = 'rgba(244, 63, 94, 0.2)'; badge.textContent = '告急'; }
+            if (infoCard) infoCard.style.borderColor = 'rgba(244, 63, 94, 0.4)';
+        }
+
+        if (resetText) {
+            if (pct === 100) resetText.textContent = '✨ 魔力充盈待命中';
+            else if (resetCountdown) resetText.textContent = `⏳ ${resetCountdown} 后回满`;
+            else resetText.textContent = '⚡ 实时额度在线';
+        }
+    }
+
+    function showAgyManaHud() {
+        if (isDraggingPet || agyIsSleeping || agyIsPeeking || agyAgentState === 'THINKING' || agyAgentState === 'SUCCESS') return;
+        const hud = pet.querySelector('#agy-pet-mana-hud');
+        if (!hud) return;
+        agyIsManaHudShown = true;
+        hud.style.display = 'flex';
+        hud.style.opacity = '1';
+        hud.style.transform = 'translateY(0) scale(1)';
+        hud.classList.add('agy-mana-vial-visible');
+
+        const pupils = pet.querySelectorAll('.pupil-el');
+        pupils.forEach(p => p.style.transform = 'translate(0.5px, -0.7px)');
+
+        fetchAgyCurrentQuota().then(data => updateAgyManaHudVisuals(data));
+    }
+
+    function hideAgyManaHud(instant = false) {
+        clearTimeout(agyManaHoverTimer);
+        const hud = pet.querySelector('#agy-pet-mana-hud');
+        if (!hud) return;
+        agyIsManaHudShown = false;
+        hud.classList.remove('agy-mana-vial-visible');
+        hud.style.opacity = '0';
+        hud.style.transform = 'translateY(4px) scale(0.95)';
+        if (instant) {
+            hud.style.display = 'none';
+        } else {
+            setTimeout(() => {
+                if (!agyIsManaHudShown && hud) hud.style.display = 'none';
+            }, 220);
+        }
+
+        if (!isDraggingPet && !agyIsTyping && !agyIsSleeping) {
+            const pupils = pet.querySelectorAll('.pupil-el');
+            pupils.forEach(p => p.style.transform = 'translate(0, 0)');
+        }
+    }
+
+    pet.addEventListener('mouseenter', () => {
+        if (isDraggingPet || agyIsSleeping || agyIsPeeking || agyAgentState === 'THINKING' || agyAgentState === 'SUCCESS') return;
+        clearTimeout(agyManaHoverTimer);
+        agyManaHoverTimer = setTimeout(showAgyManaHud, 280); // 280ms 意图防抖
+    });
+
+    pet.addEventListener('mouseleave', () => {
+        clearTimeout(agyManaHoverTimer);
+        hideAgyManaHud(false);
+    });
+
     // ✨ 细节 4：拖拽工位「悬空挣扎与软泥落水感」
     pet.addEventListener('dragstart', (e) => e.preventDefault());
 
     pet.addEventListener('mousedown', (e) => {
         if (e.button !== 0) return; // 仅左键拖拽
         e.preventDefault(); // 关键！阻断浏览器默认 HTML5 拖拽与文本选区，彻底避免 mouseup 丢失
+        clearTimeout(agyManaHoverTimer);
+        hideAgyManaHud(true); // 0ms 瞬间销毁/隐藏魔力试管，拖拽期间绝对不显示
         if (agyIsSleeping) wakeAgyPetUp();
         if (agyIsPeeking) {
             clearTimeout(agyPeekTimer);

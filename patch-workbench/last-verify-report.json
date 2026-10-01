@@ -1,9 +1,9 @@
 {
-  "verifiedAt": "2026-10-01T14:57:29.223Z",
+  "verifiedAt": "2026-10-01T15:18:18.881Z",
   "ok": true,
   "archivePath": "D:\\github\\Antigravity-Chinese\\assets\\app.asar",
-  "archiveSize": 5175810,
-  "archiveSha256": "0f9807a11d012d9ba0983d73e7be5b740e285bbab51af2f8c70cfe6238a4dbb8",
+  "archiveSize": 5187324,
+  "archiveSha256": "d10ee5a0c7b8fe8664f070c90297841f5e414e3035934a0139a6c195dfb6e17c",
   "packageVersion": "2.18.1",
   "formatVersion": 2,
   "unpackedMode": "preserve-official",
