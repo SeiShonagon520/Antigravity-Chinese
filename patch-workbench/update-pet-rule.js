@@ -10,10 +10,16 @@ const replacementCode = `function scheduleSemanticUpdate() {
             annotateSemanticDom();
             injectBranchButton();
             injectComposerPet();
+            injectMessageBranchButtons();
         }, 70);
     }
 
-    /* --- [AGY UI 增强 1] 新建对话分支 (Branch Conversation) --- */
+    function getCurrentConversationId() {
+        const match = (location.hash || location.pathname || '').match(/([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})/i);
+        return match ? match[1] : '';
+    }
+
+    /* --- [AGY UI 增强 1] 顶部新建分支按钮 --- */
     function injectBranchButton() {
         if (document.getElementById('agy-branch-btn')) return;
         const openIdeBtn = Array.from(document.querySelectorAll('button')).find(btn => {
@@ -42,7 +48,111 @@ const replacementCode = `function scheduleSemanticUpdate() {
         openIdeBtn.parentElement.insertBefore(branchBtn, openIdeBtn);
     }
 
-    function openBranchModal() {
+    /* --- [AGY UI 增强 1.2] Codex 风格：消息气泡操作栏分支按钮 --- */
+    function findMessageActionBars() {
+        const actionBars = new Set();
+        const allButtons = Array.from(document.querySelectorAll('button'));
+
+        allButtons.forEach(btn => {
+            if (btn.closest('header') || btn.closest('aside') || btn.closest('[data-agy-surface="sidebar"]')) return;
+            if (btn.closest('#antigravity\\\\.agentSidePanelInputBox') || btn.closest('[data-agy-component="composer"]')) return;
+            if (btn.closest('#agy-branch-modal') || btn.closest('#agy-composer-pet')) return;
+            if (btn.classList.contains('agy-msg-branch-btn') || btn.id === 'agy-branch-btn') return;
+            if (btn.closest('pre') || btn.closest('.monaco-editor') || btn.closest('code') || btn.closest('[class*="code-block"]')) return;
+
+            const title = (btn.getAttribute('title') || '').toLowerCase();
+            const aria = (btn.getAttribute('aria-label') || '').toLowerCase();
+            const text = (btn.textContent || '').trim().toLowerCase();
+
+            const isCopy = title.includes('copy') || aria.includes('copy') || title.includes('复制') || aria.includes('复制') || text === 'copy' || text === '复制';
+            const isFeedback = title.includes('thumb') || aria.includes('thumb') || aria.includes('like') || aria.includes('赞') || title.includes('赞') || aria.includes('踩');
+            const isRetry = title.includes('retry') || aria.includes('retry') || title.includes('重试') || aria.includes('重新生成');
+
+            if ((isCopy || isFeedback || isRetry) && btn.parentElement) {
+                actionBars.add(btn.parentElement);
+            }
+        });
+
+        return Array.from(actionBars);
+    }
+
+    function injectMessageBranchButtons() {
+        const bars = findMessageActionBars();
+        bars.forEach(bar => {
+            if (bar.querySelector('.agy-msg-branch-btn')) return;
+
+            const refBtn = bar.querySelector('button');
+            if (!refBtn) return;
+
+            const branchBtn = document.createElement('button');
+            branchBtn.type = 'button';
+            branchBtn.className = refBtn.className + ' agy-msg-branch-btn';
+            branchBtn.title = '从此消息处创建新分支 (Codex 风格历史分叉)';
+            branchBtn.style.cursor = 'pointer';
+            branchBtn.style.display = 'inline-flex';
+            branchBtn.style.alignItems = 'center';
+            branchBtn.style.justifyContent = 'center';
+            branchBtn.style.gap = '4px';
+
+            const hasText = (refBtn.textContent || '').trim().length > 0;
+            const branchSvg = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="opacity:0.85;"><line x1="6" y1="3" x2="6" y2="15"></line><circle cx="18" cy="6" r="3"></circle><circle cx="6" cy="18" r="3"></circle><path d="M18 9a9 9 0 0 1-9 9"></path></svg>';
+
+            if (hasText) {
+                branchBtn.innerHTML = branchSvg + '<span style="font-size:12px;margin-left:2px;">分支</span>';
+            } else {
+                branchBtn.innerHTML = branchSvg;
+            }
+
+            branchBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const info = getMessageTurnInfo(bar);
+                openBranchModal({
+                    sourceId: getCurrentConversationId(),
+                    snippet: info.snippet,
+                    turnIndex: info.turnIndex
+                });
+            });
+
+            bar.appendChild(branchBtn);
+        });
+    }
+
+    function getMessageTurnInfo(bar) {
+        let cur = bar.parentElement;
+        let turnContainer = cur;
+        for (let i = 0; i < 5 && cur && cur !== document.body; i++) {
+            const cls = String(cur.className || '').toLowerCase();
+            if (
+                cls.includes('message') || 
+                cls.includes('turn') || 
+                cls.includes('bubble') ||
+                cls.includes('chat-item') ||
+                cur.hasAttribute('data-turn-id') ||
+                cur.hasAttribute('data-message-id') ||
+                (cur.parentElement && cur.parentElement.children.length > 2 && cls.includes('group'))
+            ) {
+                turnContainer = cur;
+                break;
+            }
+            cur = cur.parentElement;
+        }
+
+        let text = (turnContainer.innerText || turnContainer.textContent || '').trim();
+        text = text.replace(/(Copy|复制|分支|Branch|🌿|重试|Retry|赞|踩)/g, '').trim();
+        const snippet = text.slice(0, 100);
+
+        let turnIndex = 0;
+        if (turnContainer && turnContainer.parentElement) {
+            const siblings = Array.from(turnContainer.parentElement.children).filter(el => {
+                return el.querySelector('.agy-msg-branch-btn') || el === turnContainer;
+            });
+            turnIndex = siblings.indexOf(turnContainer);
+        }
+
+        return { snippet, turnIndex };
+    }
+
+    function openBranchModal(options = {}) {
         if (document.getElementById('agy-branch-modal')) return;
 
         let currentTitle = '当前对话';
@@ -52,26 +162,39 @@ const replacementCode = `function scheduleSemanticUpdate() {
             if (txt && txt.length < 80 && !txt.includes('Open IDE')) currentTitle = txt;
         }
 
-        let currentId = '';
-        const match = (location.hash || location.pathname || '').match(/([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})/i);
-        if (match) currentId = match[1];
+        const currentId = options.sourceId || getCurrentConversationId();
+        const snippet = options.snippet || '';
+        const turnIndex = options.turnIndex !== undefined && options.turnIndex !== null ? options.turnIndex : null;
+
+        let defaultBranchTitle = \`\${currentTitle} (分支)\`;
+        if (turnIndex !== null && turnIndex >= 0) {
+            defaultBranchTitle = \`\${currentTitle} (第 \${turnIndex + 1} 轮分支)\`;
+        }
 
         const modal = document.createElement('div');
         modal.id = 'agy-branch-modal';
         modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.55);backdrop-filter:blur(6px);display:flex;align-items:center;justify-content:center;z-index:2147483647;font-family:-apple-system,BlinkMacSystemFont,\\"Segoe UI\\",Roboto,sans-serif;';
         
+        const previewHtml = snippet ? \`
+          <div style="display:flex;flex-direction:column;gap:4px;">
+            <label style="font-size:11px;font-weight:500;color:#94a3b8;">分叉历史截断点：</label>
+            <div style="font-size:11px;color:#cbd5e1;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);padding:7px 10px;border-radius:8px;max-height:54px;overflow:hidden;line-height:1.4;">"\${snippet.replace(/"/g, '&quot;')}"</div>
+          </div>
+        \` : '';
+
         modal.innerHTML = \`
-          <div style="background:rgba(24,28,36,0.96);color:#f1f5f9;border:1px solid rgba(255,255,255,0.14);border-radius:14px;padding:22px 24px;width:380px;box-shadow:0 20px 50px rgba(0,0,0,0.5);display:flex;flex-direction:column;gap:14px;">
+          <div style="background:rgba(24,28,36,0.96);color:#f1f5f9;border:1px solid rgba(255,255,255,0.14);border-radius:14px;padding:22px 24px;width:400px;box-shadow:0 20px 50px rgba(0,0,0,0.5);display:flex;flex-direction:column;gap:14px;">
             <div style="display:flex;align-items:center;gap:10px;">
-              <div style="width:32px;height:32px;border-radius:8px;background:rgba(34,197,94,0.15);color:#4ade80;display:flex;align-items:center;justify-content:center;font-size:16px;">🌿</div>
+              <div style="width:34px;height:34px;border-radius:8px;background:rgba(34,197,94,0.15);color:#4ade80;display:flex;align-items:center;justify-content:center;font-size:16px;">🌿</div>
               <div>
                 <h3 style="margin:0;font-size:15px;font-weight:600;color:#f8fafc;">新建对话分支</h3>
-                <p style="margin:2px 0 0 0;font-size:11px;color:#94a3b8;">克隆当前上下文并创建平行独立的新会话</p>
+                <p style="margin:2px 0 0 0;font-size:11px;color:#94a3b8;">\${snippet ? '从此条消息分叉，开启独立探索分支' : '克隆当前上下文并创建平行独立的新会话'}</p>
               </div>
             </div>
-            <div style="display:flex;flex-direction:column;gap:6px;margin-top:4px;">
+            \${previewHtml}
+            <div style="display:flex;flex-direction:column;gap:6px;margin-top:2px;">
               <label style="font-size:12px;font-weight:500;color:#cbd5e1;">分支会话标题：</label>
-              <input id="agy-branch-title-input" type="text" value="\${currentTitle.replace(/"/g, '&quot;')} (分支)" style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.18);border-radius:8px;padding:9px 12px;color:#fff;font-size:13px;outline:none;" />
+              <input id="agy-branch-title-input" type="text" value="\${defaultBranchTitle.replace(/"/g, '&quot;')}" style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.18);border-radius:8px;padding:9px 12px;color:#fff;font-size:13px;outline:none;" />
             </div>
             <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:6px;">
               <button id="agy-branch-cancel" type="button" style="padding:7px 15px;border:1px solid rgba(255,255,255,0.15);border-radius:8px;background:transparent;color:#94a3b8;cursor:pointer;font-size:12px;">取消</button>
@@ -94,7 +217,7 @@ const replacementCode = `function scheduleSemanticUpdate() {
         modal.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
 
         btnSubmit.addEventListener('click', async () => {
-          const branchTitle = input.value.trim() || \`\${currentTitle} (分支)\`;
+          const branchTitle = input.value.trim() || defaultBranchTitle;
           btnSubmit.disabled = true;
           btnSubmit.textContent = '正在克隆...';
           btnSubmit.style.opacity = '0.7';
@@ -102,7 +225,9 @@ const replacementCode = `function scheduleSemanticUpdate() {
           try {
             const res = await electron_1.ipcRenderer.invoke('agy:branch-conversation', {
               sourceId: currentId,
-              title: branchTitle
+              title: branchTitle,
+              turnIndex: turnIndex,
+              snippet: snippet
             });
             closeModal();
             if (res && res.success) {
@@ -150,9 +275,7 @@ const replacementCode = `function scheduleSemanticUpdate() {
     let agyIsPetBouncing = false;
 
     const AGY_PET_SVGS = {
-      // 1. 原图珊瑚橙小章鱼 (100% 还原用户截图)
       octopus: '<svg class="agy-pixel-crisp" width="34" height="34" viewBox="0 0 16 16" fill="none" style="shape-rendering:crispEdges;image-rendering:pixelated;" xmlns="http://www.w3.org/2000/svg"><rect x="3" y="3" width="10" height="7" fill="#d97757"/><rect x="4" y="2" width="8" height="1" fill="#d97757"/><rect x="2" y="5" width="12" height="4" fill="#d97757"/><rect x="1" y="6" width="1" height="2" fill="#d97757"/><rect x="14" y="6" width="1" height="2" fill="#d97757"/><rect x="4" y="5" width="1.5" height="1.5" fill="#1e1e1e"/><rect x="10.5" y="5" width="1.5" height="1.5" fill="#1e1e1e"/><rect x="3" y="10" width="1.5" height="4" fill="#d97757"/><rect x="6" y="10" width="1.5" height="4" fill="#d97757"/><rect x="8.5" y="10" width="1.5" height="4" fill="#d97757"/><rect x="11.5" y="10" width="1.5" height="4" fill="#d97757"/></svg>',
-      // 2. 线条小狗 (与用户当前的线条小狗主题完美呼应)
       puppy: '<svg class="agy-pixel-crisp" width="34" height="34" viewBox="0 0 16 16" fill="none" style="shape-rendering:crispEdges;image-rendering:pixelated;" xmlns="http://www.w3.org/2000/svg"><rect x="3" y="4" width="10" height="7" fill="#fdfbf7" stroke="#333" stroke-width="0.8"/><rect x="1.5" y="4" width="2" height="5" fill="#2d3748" rx="0.5"/><rect x="12.5" y="4" width="2" height="5" fill="#2d3748" rx="0.5"/><circle cx="5.5" cy="7" r="0.75" fill="#2d3748"/><circle cx="10.5" cy="7" r="0.75" fill="#2d3748"/><rect x="7.5" y="8" width="1" height="0.8" fill="#e53e3e" rx="0.3"/><rect x="4" y="8.5" width="1.5" height="0.8" fill="#feb2b2" rx="0.4"/><rect x="10.5" y="8.5" width="1.5" height="0.8" fill="#feb2b2" rx="0.4"/><rect x="4" y="11" width="2" height="3" fill="#fdfbf7" stroke="#333" stroke-width="0.8"/><rect x="10" y="11" width="2" height="3" fill="#fdfbf7" stroke="#333" stroke-width="0.8"/><rect x="13.5" y="8" width="1.5" height="1.5" fill="#2d3748"/></svg>'
     };
 
@@ -169,6 +292,7 @@ const replacementCode = `function scheduleSemanticUpdate() {
           .agy-pet-typing { animation: agy-pet-dance 0.35s ease-in-out infinite; }
           .agy-pet-bouncing { animation: agy-pet-bounce 0.45s cubic-bezier(0.17, 0.89, 0.32, 1.28); }
           .agy-pixel-crisp { image-rendering: pixelated; shape-rendering: crispEdges; }
+          .agy-msg-branch-btn:hover { background: rgba(255,255,255,0.12) !important; color: #4ade80 !important; }
           [data-agy-component="composer"], #antigravity\\\\.agentSidePanelInputBox { overflow: visible !important; }
         \`;
         document.head.appendChild(style);
@@ -310,8 +434,8 @@ const replacementCode = `function scheduleSemanticUpdate() {
     }, true);`;
 
 // Rule 9 is the last rule
-rules[rules.length - 1].description = 'Inject in-UI branch conversation button, modal, shortcut Ctrl+Shift+B, and standing composer pet into preload';
+rules[rules.length - 1].description = 'Inject in-UI branch conversation buttons (header and message action bars), modal, shortcut Ctrl+Shift+B, and standing composer pet into preload';
 rules[rules.length - 1].replace = replacementCode;
 
 fs.writeFileSync(rulesPath, JSON.stringify(rules, null, 2) + '\n', 'utf8');
-console.log('Successfully updated runtime-rules.json with branch button and composer pet logic!');
+console.log('Successfully updated runtime-rules.json with message-level branch buttons!');

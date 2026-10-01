@@ -95,7 +95,15 @@ electron_1.ipcMain.handle('agy:branch-conversation', async (event, args = {}) =>
     const anacondaPython = path.join(os.homedir(), 'anaconda3', 'python.exe');
     const pythonExe = fs.existsSync(anacondaPython) ? anacondaPython : 'python';
     return new Promise((resolve) => {
-        childProcess.execFile(pythonExe, [pythonScript, String(args.sourceId || ''), String(args.title || ''), String(args.upToStep || '')], { encoding: 'utf8' }, (err, stdout, stderr) => {
+        const cliArgs = [
+            pythonScript,
+            String(args.sourceId || ''),
+            String(args.title || ''),
+            String(args.upToStep !== undefined && args.upToStep !== null ? args.upToStep : ''),
+            String(args.turnIndex !== undefined && args.turnIndex !== null ? args.turnIndex : ''),
+            String(args.snippet || '')
+        ];
+        childProcess.execFile(pythonExe, cliArgs, { encoding: 'utf8' }, (err, stdout, stderr) => {
             if (err) return resolve({ success: false, error: stderr || err.message });
             try {
                 resolve(JSON.parse(stdout));

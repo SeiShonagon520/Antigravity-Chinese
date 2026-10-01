@@ -22,7 +22,58 @@ def get_latest_conversation_id():
     conn.close()
     return row[0] if row else None
 
-def branch_conversation(source_id=None, branch_title=None, up_to_step=None):
+def find_prune_step(source_id, turn_index=None, snippet=None):
+    gemini_dir = get_gemini_dir()
+    log_path = gemini_dir / "brain" / source_id / ".system_generated" / "logs" / "transcript.jsonl"
+    if not log_path.exists():
+        return None
+
+    turns = []
+    current_turn = None
+    with open(log_path, "r", encoding="utf-8", errors="ignore") as f:
+        for line in f:
+            try:
+                item = json.loads(line)
+                step_idx = item.get("step_index", 0)
+                t = item.get("type")
+                content = item.get("content") or ""
+
+                if t == "USER_INPUT":
+                    if current_turn:
+                        turns.append(current_turn)
+                    current_turn = {
+                        "user_step": step_idx,
+                        "last_step": step_idx,
+                        "user_content": content,
+                        "assistant_content": ""
+                    }
+                elif current_turn:
+                    current_turn["last_step"] = max(current_turn["last_step"], step_idx)
+                    if t == "PLANNER_RESPONSE" and content:
+                        current_turn["assistant_content"] += "\n" + content
+            except Exception:
+                pass
+
+    if current_turn:
+        turns.append(current_turn)
+
+    if not turns:
+        return None
+
+    # 1. 优先按消息内容片段精确匹配
+    if snippet and len(snippet.strip()) >= 5:
+        clean = snippet.strip()[:40]
+        for t in turns:
+            if clean in t["user_content"] or clean in t["assistant_content"]:
+                return t["last_step"]
+
+    # 2. 其次按轮次索引匹配
+    if turn_index is not None and 0 <= turn_index < len(turns):
+        return turns[turn_index]["last_step"]
+
+    return None
+
+def branch_conversation(source_id=None, branch_title=None, up_to_step=None, turn_index=None, snippet=None):
     gemini_dir = get_gemini_dir()
     sum_db_path = gemini_dir / "conversation_summaries.db"
     
@@ -35,7 +86,11 @@ def branch_conversation(source_id=None, branch_title=None, up_to_step=None):
     if not source_id:
         raise ValueError("未能找到当前活跃的会话 ID")
 
-    # 2. 读取源会话元数据
+    # 2. 如果未指定具体步数，但指定了轮次或消息文本片段，自动定位截断步数
+    if up_to_step is None and (turn_index is not None or snippet is not None):
+        up_to_step = find_prune_step(source_id, turn_index, snippet)
+
+    # 3. 读取源会话元数据
     conn_sum = sqlite3.connect(sum_db_path)
     conn_sum.row_factory = sqlite3.Row
     source_row = conn_sum.execute("SELECT * FROM conversation_summaries WHERE conversation_id = ?", (source_id,)).fetchone()
@@ -50,7 +105,7 @@ def branch_conversation(source_id=None, branch_title=None, up_to_step=None):
 
     new_id = str(uuid.uuid4())
 
-    # 3. 复制 conversations/<source_id>.db 数据库 (使用官方 backup API 确保 WAL 模式安全原子复制)
+    # 4. 复制 conversations/<source_id>.db 数据库 (使用官方 backup API 确保 WAL 模式安全原子复制)
     src_db = gemini_dir / "conversations" / f"{source_id}.db"
     dst_db = gemini_dir / "conversations" / f"{new_id}.db"
     if src_db.exists():
@@ -83,7 +138,7 @@ def branch_conversation(source_id=None, branch_title=None, up_to_step=None):
     else:
         actual_steps = row_dict.get("step_count", 0)
 
-    # 4. 复制 brain/<source_id> 目录
+    # 5. 复制 brain/<source_id> 目录
     src_brain = gemini_dir / "brain" / source_id
     dst_brain = gemini_dir / "brain" / new_id
     if src_brain.exists():
@@ -105,7 +160,7 @@ def branch_conversation(source_id=None, branch_title=None, up_to_step=None):
                     with open(log_path, "w", encoding="utf-8") as f:
                         f.writelines(lines)
 
-    # 5. 插入 conversation_summaries.db 新行
+    # 6. 插入 conversation_summaries.db 新行
     now_str = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S.0000000+00:00")
     row_dict["conversation_id"] = new_id
     row_dict["title"] = branch_title
@@ -127,7 +182,7 @@ def branch_conversation(source_id=None, branch_title=None, up_to_step=None):
     conn_sum.commit()
     conn_sum.close()
 
-    # 6. 更新 app_storage.json 置顶与布局
+    # 7. 更新 app_storage.json 置顶与布局
     storage_path = get_app_storage_path()
     if storage_path.exists():
         try:
@@ -159,15 +214,18 @@ def branch_conversation(source_id=None, branch_title=None, up_to_step=None):
         "branchId": new_id,
         "sourceId": source_id,
         "title": branch_title,
-        "stepCount": actual_steps
+        "stepCount": actual_steps,
+        "prunedToStep": up_to_step
     }
 
 if __name__ == "__main__":
     src = sys.argv[1] if len(sys.argv) > 1 and sys.argv[1] else None
     title = sys.argv[2] if len(sys.argv) > 2 and sys.argv[2] else None
     step = int(sys.argv[3]) if len(sys.argv) > 3 and sys.argv[3].isdigit() else None
+    t_idx = int(sys.argv[4]) if len(sys.argv) > 4 and sys.argv[4].isdigit() else None
+    snip = sys.argv[5] if len(sys.argv) > 5 and sys.argv[5] else None
     try:
-        res = branch_conversation(src, title, step)
+        res = branch_conversation(src, title, step, t_idx, snip)
         print(json.dumps(res, ensure_ascii=False, indent=2))
     except Exception as err:
         print(json.dumps({"success": False, "error": str(err)}, ensure_ascii=False))
