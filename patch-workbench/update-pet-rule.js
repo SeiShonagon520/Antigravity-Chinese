@@ -269,14 +269,67 @@ const replacementCode = `function scheduleSemanticUpdate() {
         }
     });
 
-    /* --- [AGY UI 增强 2] 对话框顶部站立小宠物 (Composer Standing Pet) --- */
+    /* --- [AGY UI 增强 2] 对话框顶部站立小宠物 (高精第一阶段：逐帧呼吸、自然眨眼、视线追踪、急速键盘) --- */
     let agyCurrentPet = localStorage.getItem('agy-pet-type') || 'octopus';
     let agyPetTypingTimer = null;
     let agyIsPetBouncing = false;
+    let agyIsTyping = false;
+    let agyBlinkTimer = null;
 
     const AGY_PET_SVGS = {
-      octopus: '<svg class="agy-pixel-crisp" width="34" height="34" viewBox="0 0 16 16" fill="none" style="shape-rendering:crispEdges;image-rendering:pixelated;" xmlns="http://www.w3.org/2000/svg"><rect x="3" y="3" width="10" height="7" fill="#d97757"/><rect x="4" y="2" width="8" height="1" fill="#d97757"/><rect x="2" y="5" width="12" height="4" fill="#d97757"/><rect x="1" y="6" width="1" height="2" fill="#d97757"/><rect x="14" y="6" width="1" height="2" fill="#d97757"/><rect x="4" y="5" width="1.5" height="1.5" fill="#1e1e1e"/><rect x="10.5" y="5" width="1.5" height="1.5" fill="#1e1e1e"/><rect x="3" y="10" width="1.5" height="4" fill="#d97757"/><rect x="6" y="10" width="1.5" height="4" fill="#d97757"/><rect x="8.5" y="10" width="1.5" height="4" fill="#d97757"/><rect x="11.5" y="10" width="1.5" height="4" fill="#d97757"/></svg>',
-      puppy: '<svg class="agy-pixel-crisp" width="34" height="34" viewBox="0 0 16 16" fill="none" style="shape-rendering:crispEdges;image-rendering:pixelated;" xmlns="http://www.w3.org/2000/svg"><rect x="3" y="4" width="10" height="7" fill="#fdfbf7" stroke="#333" stroke-width="0.8"/><rect x="1.5" y="4" width="2" height="5" fill="#2d3748" rx="0.5"/><rect x="12.5" y="4" width="2" height="5" fill="#2d3748" rx="0.5"/><circle cx="5.5" cy="7" r="0.75" fill="#2d3748"/><circle cx="10.5" cy="7" r="0.75" fill="#2d3748"/><rect x="7.5" y="8" width="1" height="0.8" fill="#e53e3e" rx="0.3"/><rect x="4" y="8.5" width="1.5" height="0.8" fill="#feb2b2" rx="0.4"/><rect x="10.5" y="8.5" width="1.5" height="0.8" fill="#feb2b2" rx="0.4"/><rect x="4" y="11" width="2" height="3" fill="#fdfbf7" stroke="#333" stroke-width="0.8"/><rect x="10" y="11" width="2" height="3" fill="#fdfbf7" stroke="#333" stroke-width="0.8"/><rect x="13.5" y="8" width="1.5" height="1.5" fill="#2d3748"/></svg>'
+      // 1. 原图珊瑚橙小章鱼 (含独立瞳孔、眨眼横缝与微型像素键盘)
+      octopus: \`<svg class="agy-pixel-crisp" width="36" height="36" viewBox="0 0 18 18" fill="none" style="shape-rendering:crispEdges;image-rendering:pixelated;" xmlns="http://www.w3.org/2000/svg">
+          <rect x="4" y="3" width="10" height="8" fill="#d97757" rx="0.3"/>
+          <rect x="5" y="2" width="8" height="1" fill="#d97757"/>
+          <rect x="3" y="5" width="12" height="5" fill="#d97757"/>
+          <rect x="2" y="6" width="1" height="3" fill="#d97757"/>
+          <rect x="15" y="6" width="1" height="3" fill="#d97757"/>
+          <g id="left-eye-group">
+            <rect id="left-pupil" class="pupil-el" x="5.2" y="5.5" width="1.6" height="1.6" fill="#18181b" style="transition:transform 0.08s ease-out;"/>
+            <rect id="left-blink" class="blink-el" x="4.8" y="6" width="2.4" height="0.8" fill="#18181b" style="display:none;"/>
+          </g>
+          <g id="right-eye-group">
+            <rect id="right-pupil" class="pupil-el" x="11.2" y="5.5" width="1.6" height="1.6" fill="#18181b" style="transition:transform 0.08s ease-out;"/>
+            <rect id="right-blink" class="blink-el" x="10.8" y="6" width="2.4" height="0.8" fill="#18181b" style="display:none;"/>
+          </g>
+          <rect class="leg-el leg-odd" x="4" y="11" width="1.6" height="4" fill="#d97757"/>
+          <rect class="leg-el leg-even" x="7" y="11" width="1.6" height="4" fill="#d97757"/>
+          <rect class="leg-el leg-odd" x="9.5" y="11" width="1.6" height="4" fill="#d97757"/>
+          <rect class="leg-el leg-even" x="12.5" y="11" width="1.6" height="4" fill="#d97757"/>
+          <g id="mini-kb" style="display:none;">
+            <rect x="4" y="13.2" width="10" height="2" fill="#1e293b" rx="0.4"/>
+            <rect x="4.8" y="13.6" width="1.4" height="1.2" fill="#38bdf8"/>
+            <rect x="6.8" y="13.6" width="1.4" height="1.2" fill="#a855f7"/>
+            <rect x="8.8" y="13.6" width="1.4" height="1.2" fill="#38bdf8"/>
+            <rect x="10.8" y="13.6" width="1.4" height="1.2" fill="#a855f7"/>
+          </g>
+        </svg>\`,
+
+      // 2. 线条小狗 (垂耳微动、独立瞳孔、爪子起伏)
+      puppy: \`<svg class="agy-pixel-crisp" width="36" height="36" viewBox="0 0 18 18" fill="none" style="shape-rendering:crispEdges;image-rendering:pixelated;" xmlns="http://www.w3.org/2000/svg">
+          <rect x="4" y="4" width="10" height="7.5" fill="#fdfbf7" stroke="#333" stroke-width="0.8"/>
+          <rect class="puppy-ear" x="2.5" y="4" width="2" height="5.5" fill="#2d3748" rx="0.5" style="transform-origin:top center;"/>
+          <rect class="puppy-ear" x="13.5" y="4" width="2" height="5.5" fill="#2d3748" rx="0.5" style="transform-origin:top center;"/>
+          <g id="left-eye-group">
+            <circle id="left-pupil" class="pupil-el" cx="6.5" cy="7.2" r="0.9" fill="#2d3748" style="transition:transform 0.08s ease-out;"/>
+            <rect id="left-blink" class="blink-el" x="5.5" y="7" width="2.2" height="0.8" fill="#2d3748" style="display:none;"/>
+          </g>
+          <g id="right-eye-group">
+            <circle id="right-pupil" class="pupil-el" cx="11.5" cy="7.2" r="0.9" fill="#2d3748" style="transition:transform 0.08s ease-out;"/>
+            <rect id="right-blink" class="blink-el" x="10.5" y="7" width="2.2" height="0.8" fill="#2d3748" style="display:none;"/>
+          </g>
+          <rect x="8.5" y="8.2" width="1" height="0.8" fill="#e53e3e" rx="0.3"/>
+          <rect x="5" y="8.8" width="1.5" height="0.8" fill="#feb2b2" rx="0.4"/>
+          <rect x="11.5" y="8.8" width="1.5" height="0.8" fill="#feb2b2" rx="0.4"/>
+          <rect class="leg-el leg-odd" x="5" y="11.5" width="2.2" height="3.5" fill="#fdfbf7" stroke="#333" stroke-width="0.8"/>
+          <rect class="leg-el leg-even" x="10.8" y="11.5" width="2.2" height="3.5" fill="#fdfbf7" stroke="#333" stroke-width="0.8"/>
+          <g id="mini-kb" style="display:none;">
+            <rect x="4" y="13.2" width="10" height="2" fill="#1e293b" rx="0.4"/>
+            <rect x="5.2" y="13.6" width="1.8" height="1.2" fill="#f43f5e"/>
+            <rect x="8" y="13.6" width="2" height="1.2" fill="#38bdf8"/>
+            <rect x="11" y="13.6" width="1.8" height="1.2" fill="#f43f5e"/>
+          </g>
+        </svg>\`
     };
 
     function ensureAgyPetStyles() {
@@ -284,18 +337,45 @@ const replacementCode = `function scheduleSemanticUpdate() {
         const style = document.createElement('style');
         style.id = 'agy-pet-styles';
         style.textContent = \`
-          @keyframes agy-pet-idle { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-2px); } }
-          @keyframes agy-pet-bounce { 0%, 100% { transform: translateY(0) scale(1,1); } 30% { transform: translateY(-9px) scale(0.9,1.1); } 60% { transform: translateY(0) scale(1.1,0.9); } }
-          @keyframes agy-pet-dance { 0%, 100% { transform: translateY(0) rotate(0deg); } 25% { transform: translateY(-3px) rotate(-6deg); } 75% { transform: translateY(-3px) rotate(6deg); } }
-          @keyframes agy-heart-float { 0% { opacity:0; transform:translateY(0) scale(0.6); } 30% { opacity:1; transform:translateY(-10px) scale(1); } 100% { opacity:0; transform:translateY(-24px) scale(1.2); } }
-          .agy-pet-idle { animation: agy-pet-idle 2.4s ease-in-out infinite; }
-          .agy-pet-typing { animation: agy-pet-dance 0.35s ease-in-out infinite; }
-          .agy-pet-bouncing { animation: agy-pet-bounce 0.45s cubic-bezier(0.17, 0.89, 0.32, 1.28); }
+          @keyframes agy-pet-idle-subtle { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-1.5px); } }
+          @keyframes agy-pet-bounce-pro { 0%, 100% { transform: translateY(0) scale(1,1); } 25% { transform: translateY(-10px) scale(0.9,1.15); } 50% { transform: translateY(-2px) scale(1.08,0.92); } 75% { transform: translateY(-5px) scale(0.96,1.04); } }
+          @keyframes agy-heart-float-pro { 0% { opacity:0; transform:translateY(0) scale(0.6); } 25% { opacity:1; transform:translateY(-10px) scale(1.1); } 100% { opacity:0; transform:translateY(-26px) scale(1.3); } }
+          @keyframes agy-leg-type-odd { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-2.2px); } }
+          @keyframes agy-leg-type-even { 0%, 100% { transform: translateY(-2.2px); } 50% { transform: translateY(0); } }
+          @keyframes agy-puppy-ear-perk { 0%, 100% { transform: rotate(0deg); } 50% { transform: rotate(-8deg); } }
+
+          .agy-pet-idle-anim { animation: agy-pet-idle-subtle 2.8s ease-in-out infinite; }
+          .agy-pet-bounce-anim { animation: agy-pet-bounce-pro 0.55s cubic-bezier(0.17, 0.89, 0.32, 1.28); }
+          .agy-typing-mode .leg-odd { animation: agy-leg-type-odd 0.14s infinite ease-in-out; }
+          .agy-typing-mode .leg-even { animation: agy-leg-type-even 0.14s infinite ease-in-out; }
+          .agy-typing-mode .puppy-ear { animation: agy-puppy-ear-perk 0.2s infinite alternate ease-in-out; }
           .agy-pixel-crisp { image-rendering: pixelated; shape-rendering: crispEdges; }
           .agy-msg-branch-btn:hover { background: rgba(255,255,255,0.12) !important; color: #4ade80 !important; }
           [data-agy-component="composer"], #antigravity\\\\.agentSidePanelInputBox { overflow: visible !important; }
         \`;
         document.head.appendChild(style);
+    }
+
+    function triggerPetBlink() {
+        const pet = document.getElementById('agy-composer-pet');
+        if (!pet) return;
+        const pupils = pet.querySelectorAll('.pupil-el');
+        const blinks = pet.querySelectorAll('.blink-el');
+        pupils.forEach(p => p.style.display = 'none');
+        blinks.forEach(b => b.style.display = 'block');
+        setTimeout(() => {
+            pupils.forEach(p => p.style.display = '');
+            blinks.forEach(b => b.style.display = 'none');
+        }, 140);
+    }
+
+    function schedulePetBlink() {
+        clearTimeout(agyBlinkTimer);
+        const nextTime = Math.random() * 2500 + 2000;
+        agyBlinkTimer = setTimeout(() => {
+            triggerPetBlink();
+            schedulePetBlink();
+        }, nextTime);
     }
 
     function findAgyComposerContainer() {
@@ -349,7 +429,7 @@ const replacementCode = `function scheduleSemanticUpdate() {
         pet.innerHTML = \`
           <div id="agy-pet-bubble" style="position:absolute;bottom:100%;margin-bottom:6px;padding:3px 9px;border-radius:6px;background:rgba(24,28,36,0.92);border:1px solid rgba(255,255,255,0.18);color:#f1f5f9;font-size:11px;white-space:nowrap;box-shadow:0 4px 12px rgba(0,0,0,0.3);opacity:0;pointer-events:none;transition:all 0.2s ease;transform:translateY(3px);">戳我一下~</div>
           <div id="agy-heart-burst" style="position:absolute;bottom:100%;pointer-events:none;opacity:0;font-size:12px;">❤️</div>
-          <div id="agy-pet-sprite" class="agy-pet-idle" style="transform-origin:bottom center;">
+          <div id="agy-pet-sprite" class="agy-pet-idle-anim" style="transform-origin:bottom center;">
             \${AGY_PET_SVGS[agyCurrentPet] || AGY_PET_SVGS.octopus}
           </div>
         \`;
@@ -377,26 +457,27 @@ const replacementCode = `function scheduleSemanticUpdate() {
             const heart = pet.querySelector('#agy-heart-burst');
             const bubble = pet.querySelector('#agy-pet-bubble');
 
-            sprite.className = 'agy-pet-bouncing';
+            sprite.className = 'agy-pet-bounce-anim';
+            triggerPetBlink();
             if (heart) {
                 heart.style.animation = 'none';
                 heart.offsetHeight;
-                heart.style.animation = 'agy-heart-float 0.8s forwards ease-out';
+                heart.style.animation = 'agy-heart-float-pro 0.8s forwards ease-out';
             }
             if (bubble) {
-                const phrases = ['今天也要加油！', '代码写得超棒！', '摸摸头~', '我在陪着你哦~', '哔哔！灵感迸发~'];
+                const phrases = ['今天写代码超顺！', '灵感爆发啦~', '摸摸头，零Bug！', '代码写得超棒！', '哔哔~ 专注中！'];
                 bubble.textContent = phrases[Math.floor(Math.random() * phrases.length)];
                 bubble.style.opacity = '1';
                 bubble.style.transform = 'translateY(0)';
             }
 
             setTimeout(() => {
-                sprite.className = 'agy-pet-idle';
+                sprite.className = 'agy-pet-idle-anim';
                 agyIsPetBouncing = false;
                 setTimeout(() => {
                     if (bubble) bubble.style.opacity = '0';
                 }, 1000);
-            }, 500);
+            }, 550);
         });
 
         pet.addEventListener('dblclick', (e) => {
@@ -416,26 +497,64 @@ const replacementCode = `function scheduleSemanticUpdate() {
         });
 
         composer.appendChild(pet);
+        schedulePetBlink();
     }
 
+    /* --- 视线随鼠标光标动态追踪 --- */
+    window.addEventListener('mousemove', (e) => {
+        if (agyIsTyping) return;
+        const pet = document.getElementById('agy-composer-pet');
+        if (!pet) return;
+        const rect = pet.getBoundingClientRect();
+        const cx = rect.left + rect.width / 2;
+        const cy = rect.top + rect.height / 2;
+        const dx = e.clientX - cx;
+        const dy = e.clientY - cy;
+        const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+        
+        const offsetX = Math.max(-0.8, Math.min(0.8, (dx / dist) * 0.8));
+        const offsetY = Math.max(-0.7, Math.min(0.7, (dy / dist) * 0.7));
+
+        const pupils = pet.querySelectorAll('.pupil-el');
+        pupils.forEach(p => {
+            p.style.transform = \`translate(\${offsetX.toFixed(2)}px, \${offsetY.toFixed(2)}px)\`;
+        });
+    });
+
+    /* --- 打字状态：触手狂飙敲击微型键盘 + 低头看输入框 --- */
     window.addEventListener('input', (e) => {
         const tag = (e.target && e.target.tagName) || '';
         if (tag === 'TEXTAREA' || tag === 'INPUT' || (e.target && e.target.isContentEditable)) {
             const pet = document.getElementById('agy-composer-pet');
             if (!pet) return;
             const sprite = pet.querySelector('#agy-pet-sprite');
+            const miniKb = pet.querySelector('#mini-kb');
             if (!sprite || agyIsPetBouncing) return;
-            sprite.className = 'agy-pet-typing';
+
+            agyIsTyping = true;
+            sprite.classList.add('agy-typing-mode');
+            if (miniKb) miniKb.style.display = 'block';
+
+            // 视线专注看输入框
+            const pupils = pet.querySelectorAll('.pupil-el');
+            pupils.forEach(p => {
+                p.style.transform = 'translate(0px, 0.8px)';
+            });
+
             clearTimeout(agyPetTypingTimer);
             agyPetTypingTimer = setTimeout(() => {
-                if (!agyIsPetBouncing && sprite) sprite.className = 'agy-pet-idle';
-            }, 600);
+                agyIsTyping = false;
+                if (!agyIsPetBouncing && sprite) {
+                    sprite.classList.remove('agy-typing-mode');
+                    if (miniKb) miniKb.style.display = 'none';
+                }
+            }, 700);
         }
     }, true);`;
 
 // Rule 9 is the last rule
-rules[rules.length - 1].description = 'Inject in-UI branch conversation buttons (header and message action bars), modal, shortcut Ctrl+Shift+B, and standing composer pet into preload';
+rules[rules.length - 1].description = 'Inject in-UI branch conversation buttons, modal, shortcut, and high-fidelity Phase 1 pet (blink, eye-tracking, keyboard typing) into preload';
 rules[rules.length - 1].replace = replacementCode;
 
 fs.writeFileSync(rulesPath, JSON.stringify(rules, null, 2) + '\n', 'utf8');
-console.log('Successfully updated runtime-rules.json with message-level branch buttons!');
+console.log('Successfully updated runtime-rules.json with Phase 1 pet details!');
