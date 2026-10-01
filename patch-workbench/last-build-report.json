@@ -1,27 +1,27 @@
 {
   "ok": true,
-  "officialAsar": "C:\\Users\\niu\\AppData\\Local\\Programs\\Antigravity\\resources\\app.asar.original",
-  "officialVersion": "2.19.1",
-  "officialSha256": "341234faf45bd1776fd5418a3c288dedc5487ebfcf153f53d75de17cfe15c1de",
-  "outputAsar": "C:\\Users\\niu\\.gemini\\antigravity\\scratch\\agy-hub\\assets\\app.asar",
-  "outputSize": 5114434,
-  "outputSha256": "cee6fa3c265592fbc0df3f1ac6aa62bf71386ee891a7a376ad42e0236fd91996",
+  "officialAsar": "C:\\Users\\L\\AppData\\Local\\Programs\\Antigravity\\resources\\app.asar.original",
+  "officialVersion": "2.18.1",
+  "officialSha256": "3c03ce352dc3c1b43f357c27ead1f73c74d198a8ded89b1b3d6a2539e7a6ac5c",
+  "outputAsar": "D:\\github\\Antigravity-Chinese\\assets\\app.asar",
+  "outputSize": 5113095,
+  "outputSha256": "88a91c4345d7c48e10483fdc102d981a2f7bb16baaa0adb1315a9074ee72092c",
   "compatibility": {
     "files": [
       {
         "file": "dist/preload.js",
-        "officialBytes": 5337,
-        "rebuiltBytes": 368444
+        "officialBytes": 5151,
+        "rebuiltBytes": 375299
       },
       {
         "file": "dist/main.js",
-        "officialBytes": 20023,
-        "rebuiltBytes": 31990
+        "officialBytes": 19873,
+        "rebuiltBytes": 32859
       },
       {
         "file": "dist/tray.js",
-        "officialBytes": 3765,
-        "rebuiltBytes": 5078
+        "officialBytes": 3669,
+        "rebuiltBytes": 4982
       },
       {
         "file": "dist/utils.js",
@@ -30,8 +30,8 @@
       },
       {
         "file": "dist/ipcHandlers.js",
-        "officialBytes": 16557,
-        "rebuiltBytes": 113454
+        "officialBytes": 14110,
+        "rebuiltBytes": 111007
       },
       {
         "file": "dist/languageServer.js",
@@ -55,6 +55,36 @@
         "index": 4,
         "file": "dist/preload.js",
         "description": "Remove only opaque Antigravity 2.4.3 sidebar wrapper backgrounds while preserving the established glass gradient",
+        "hits": 1
+      },
+      {
+        "index": 5,
+        "file": "dist/preload.js",
+        "description": "Disable bottom-left quota and multi-account card widget to keep workspace sidebar clear",
+        "hits": 1
+      },
+      {
+        "index": 6,
+        "file": "dist/preload.js",
+        "description": "Disable top-bar patch version label and update badge",
+        "hits": 1
+      },
+      {
+        "index": 7,
+        "file": "dist/preload.js",
+        "description": "Hide right-bottom theme switcher trigger button v1",
+        "hits": 1
+      },
+      {
+        "index": 8,
+        "file": "dist/preload.js",
+        "description": "Hide right-bottom theme switcher trigger button v2",
+        "hits": 1
+      },
+      {
+        "index": 9,
+        "file": "dist/preload.js",
+        "description": "Inject in-UI branch conversation button, modal, and Ctrl+Shift+B shortcut into preload",
         "hits": 1
       },
       {

@@ -1,10 +1,10 @@
 {
-  "verifiedAt": "2026-10-01T05:38:21.390Z",
+  "verifiedAt": "2026-10-01T07:32:23.974Z",
   "ok": true,
-  "archivePath": "C:\\Users\\niu\\.gemini\\antigravity\\scratch\\agy-hub\\assets\\app.asar",
-  "archiveSize": 5114434,
-  "archiveSha256": "cee6fa3c265592fbc0df3f1ac6aa62bf71386ee891a7a376ad42e0236fd91996",
-  "packageVersion": "2.19.1",
+  "archivePath": "D:\\github\\Antigravity-Chinese\\assets\\app.asar",
+  "archiveSize": 5113095,
+  "archiveSha256": "88a91c4345d7c48e10483fdc102d981a2f7bb16baaa0adb1315a9074ee72092c",
+  "packageVersion": "2.18.1",
   "formatVersion": 2,
   "unpackedMode": "preserve-official",
   "requiredFiles": [

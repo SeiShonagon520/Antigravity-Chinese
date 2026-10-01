@@ -84,7 +84,29 @@ function buildPreload(official, legacy) {
 }
 
 function buildMain(official, legacy) {
-  const header = extractBetween(legacy, 'const agyThemePath = require("path");', 'const gotTheLock = electron_1.app.requestSingleInstanceLock();', 'main AGY header');
+  const rawHeader = extractBetween(legacy, 'const agyThemePath = require("path");', 'const gotTheLock = electron_1.app.requestSingleInstanceLock();', 'main AGY header');
+  const branchIpcHandler = `
+electron_1.ipcMain.handle('agy:branch-conversation', async (event, args = {}) => {
+    const fs = require('fs');
+    const path = require('path');
+    const os = require('os');
+    const childProcess = require('child_process');
+    const pythonScript = path.join(process.env.APPDATA || '', 'Antigravity', 'scripts', 'branch_conversation.py');
+    const anacondaPython = path.join(os.homedir(), 'anaconda3', 'python.exe');
+    const pythonExe = fs.existsSync(anacondaPython) ? anacondaPython : 'python';
+    return new Promise((resolve) => {
+        childProcess.execFile(pythonExe, [pythonScript, String(args.sourceId || ''), String(args.title || ''), String(args.upToStep || '')], { encoding: 'utf8' }, (err, stdout, stderr) => {
+            if (err) return resolve({ success: false, error: stderr || err.message });
+            try {
+                resolve(JSON.parse(stdout));
+            } catch (e) {
+                resolve({ success: false, error: stdout || e.message });
+            }
+        });
+    });
+});
+`;
+  const header = `${rawHeader}\n${branchIpcHandler}\n`;
   const autoProxy = extractBetween(
     legacy,
     '    // Auto-Proxy Injection for Electron Main Session (Codex / Webview)',
