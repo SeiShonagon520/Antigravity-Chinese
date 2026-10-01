@@ -524,10 +524,10 @@ function ensureAgyPetStyles() {
       /* ✨ 细节 1：漫步边缘驻足探头张望动效 */
       @keyframes agy-pet-peek-anim {
         0% { transform: translateY(0) rotate(0deg) scale(1, 1); }
-        20% { transform: translateY(1px) rotate(8deg) scale(1.04, 0.96); }
-        40% { transform: translateY(-2px) rotate(12deg) scale(0.96, 1.04); }
-        65% { transform: translateY(-2px) rotate(9deg) scale(0.98, 1.02); }
-        85% { transform: translateY(0.5px) rotate(3deg) scale(1.02, 0.98); }
+        20% { transform: translateY(1px) rotate(-8deg) scale(1.04, 0.96); }
+        40% { transform: translateY(-2px) rotate(-12deg) scale(0.96, 1.04); }
+        65% { transform: translateY(-2px) rotate(-9deg) scale(0.98, 1.02); }
+        85% { transform: translateY(0.5px) rotate(-3deg) scale(1.02, 0.98); }
         100% { transform: translateY(0) rotate(0deg) scale(1, 1); }
       }
 
@@ -819,6 +819,15 @@ setInterval(() => {
     if (isGenerating && !agyLastDetectedActive) {
         // 开始生成 / 推理
         if (agyIsSleeping) wakeAgyPetUp();
+        if (agyIsPeeking) {
+            clearTimeout(agyPeekTimer);
+            agyIsPeeking = false;
+            const pet = document.getElementById('agy-composer-pet');
+            if (pet) {
+                const sprite = pet.querySelector('#agy-pet-sprite');
+                if (sprite) sprite.classList.remove('agy-pet-peeking');
+            }
+        }
         agyLastDetectedActive = true;
         const isTool = document.querySelector('[class*="terminal"], [class*="task-item"], [class*="tool-call"], [class*="executing"]') !== null;
         agyAgentState = isTool ? 'CODING' : 'THINKING';
@@ -843,6 +852,7 @@ setInterval(() => {
 
 // ✨ 细节 1：漫步折返时的「探头驻足」微动作
 let agyPatrolDir = 1;
+let agyPeekTimer = null;
 setInterval(() => {
     if (!agyPatrolEnabled || agyIsTyping || agyAgentState !== 'IDLE' || agyIsSleeping || agyIsPeeking || isDraggingPet) {
         const pet = document.getElementById('agy-composer-pet');
@@ -857,11 +867,14 @@ setInterval(() => {
     const composer = findAgyComposerContainer();
     if (!pet || !composer) return;
 
-    const maxOffset = composer.clientWidth - 52;
+    const maxOffset = Math.max(60, composer.clientWidth - 52);
 
-    if (agyPetOffset >= maxOffset || agyPetOffset <= 24) {
+    const isHitLeftEdge = (agyPetOffset >= maxOffset && agyPatrolDir === 1);
+    const isHitRightEdge = (agyPetOffset <= 24 && agyPatrolDir === -1);
+
+    if (isHitLeftEdge || isHitRightEdge) {
         agyIsPeeking = true;
-        agyPetOffset = agyPetOffset >= maxOffset ? maxOffset : 24;
+        agyPetOffset = isHitLeftEdge ? maxOffset : 24;
         pet.style.right = agyPetOffset + 'px';
         const sprite = pet.querySelector('#agy-pet-sprite');
         if (sprite) {
@@ -869,15 +882,26 @@ setInterval(() => {
             sprite.classList.add('agy-pet-peeking');
         }
         const pupils = pet.querySelectorAll('.pupil-el');
-        pupils.forEach(p => p.style.transform = 'translate(0, 0.9px)');
+        pupils.forEach(p => p.style.transform = 'translate(-0.4px, 0.9px)');
 
-        setTimeout(() => {
-            agyPatrolDir = agyPetOffset <= 24 ? 1 : -1;
+        clearTimeout(agyPeekTimer);
+        agyPeekTimer = setTimeout(() => {
+            // 变更方向并触发平滑转身
+            agyPatrolDir = isHitLeftEdge ? -1 : 1;
+            const flipper = pet.querySelector('#agy-pet-flipper');
+            if (flipper) {
+                flipper.style.transform = agyPatrolDir === 1 ? 'scaleX(1)' : 'scaleX(-1)';
+            }
             if (sprite) {
-                sprite.style.transform = agyPatrolDir === 1 ? 'scaleX(1)' : 'scaleX(-1)';
                 sprite.classList.remove('agy-pet-peeking');
+                sprite.classList.add('agy-patrol-mode');
             }
             pupils.forEach(p => p.style.transform = 'translate(0, 0)');
+
+            // 踏出安全距离，彻底避免下一 tick 再次卡入边缘判定死循环
+            agyPetOffset = isHitLeftEdge ? (maxOffset - 4) : 28;
+            pet.style.right = agyPetOffset + 'px';
+
             agyIsPeeking = false;
         }, 1400);
         return;
@@ -1008,8 +1032,10 @@ function injectComposerPet() {
       <div id="agy-heart-burst" style="position:absolute;bottom:100%;pointer-events:none;opacity:0;font-size:12px;">❤️</div>
       <div id="agy-confetti-container" style="position:absolute;bottom:12px;left:50%;transform:translateX(-50%);pointer-events:none;width:0;height:0;z-index:58;"></div>
       <div id="agy-celebrate-badge" class="agy-celebrate-badge" style="position:absolute;bottom:42px;white-space:nowrap;padding:3px 10px;border-radius:9999px;background:rgba(15,23,42,0.95);border:1px solid rgba(74,222,128,0.55);color:#4ade80;font-size:11px;font-weight:600;box-shadow:0 6px 18px rgba(0,0,0,0.4),0 0 12px rgba(74,222,128,0.25);pointer-events:none;z-index:60;display:none;align-items:center;gap:4px;"><span>✨ 任务圆满达成！🎉</span></div>
-      <div id="agy-pet-sprite" class="agy-pet-idle-anim" style="transform-origin:bottom center;">
-        ${AGY_PET_SVGS[agyCurrentPet] || AGY_PET_SVGS.octopus}
+      <div id="agy-pet-flipper" style="transform-origin:bottom center;transition:transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);transform:${agyPatrolDir === 1 ? 'scaleX(1)' : 'scaleX(-1)'};">
+        <div id="agy-pet-sprite" class="agy-pet-idle-anim" style="transform-origin:bottom center;">
+          ${AGY_PET_SVGS[agyCurrentPet] || AGY_PET_SVGS.octopus}
+        </div>
       </div>
     `;
 
@@ -1017,6 +1043,12 @@ function injectComposerPet() {
     pet.addEventListener('mousedown', (e) => {
         if (e.button !== 0) return; // 仅左键拖拽
         if (agyIsSleeping) wakeAgyPetUp();
+        if (agyIsPeeking) {
+            clearTimeout(agyPeekTimer);
+            agyIsPeeking = false;
+            const sprite = pet.querySelector('#agy-pet-sprite');
+            if (sprite) sprite.classList.remove('agy-pet-peeking');
+        }
         isDraggingPet = true;
         dragStartX = e.clientX;
         dragLastX = e.clientX;
@@ -1259,6 +1291,12 @@ window.addEventListener('input', (e) => {
         const sprite = pet.querySelector('#agy-pet-sprite');
         const miniKb = pet.querySelector('#mini-kb');
         if (!sprite || agyIsPetBouncing || isDraggingPet || agyIsSleeping) return;
+
+        if (agyIsPeeking) {
+            clearTimeout(agyPeekTimer);
+            agyIsPeeking = false;
+            sprite.classList.remove('agy-pet-peeking');
+        }
 
         agyIsTyping = true;
         sprite.classList.add('agy-typing-mode');
