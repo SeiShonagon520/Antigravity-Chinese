@@ -352,10 +352,12 @@ const replacementCode = `function scheduleSemanticUpdate() {
             <rect id="right-blink" class="blink-el" x="10.8" y="6" width="2.4" height="0.8" fill="#18181b" style="display:none;"/>
           </g>
 
-          <!-- 完成时：星星眼 -->
-          <g id="agy-star-eyes" style="display:none;">
-            <polygon points="6,4.5 6.5,5.8 7.8,5.8 6.8,6.6 7.2,7.8 6,7 4.8,7.8 5.2,6.6 4.2,5.8 5.5,5.8" fill="#fbbf24"/>
-            <polygon points="12,4.5 12.5,5.8 13.8,5.8 12.8,6.6 13.2,7.8 12,7 10.8,7.8 11.2,6.6 10.2,5.8 11.5,5.8" fill="#fbbf24"/>
+          <!-- 完成时：元气弯弯笑眼 ^ ^ + 绯红腮红 -->
+          <g id="agy-happy-eyes" style="display:none;">
+            <path d="M4.6 6.8 C5.2 5.3 6.8 5.3 7.4 6.8" stroke="#18181b" stroke-width="1.1" stroke-linecap="round" fill="none"/>
+            <path d="M10.6 6.8 C11.2 5.3 12.8 5.3 13.4 6.8" stroke="#18181b" stroke-width="1.1" stroke-linecap="round" fill="none"/>
+            <ellipse cx="4.2" cy="8.1" rx="1.1" ry="0.6" fill="#f43f5e" opacity="0.65"/>
+            <ellipse cx="13.8" cy="8.1" rx="1.1" ry="0.6" fill="#f43f5e" opacity="0.65"/>
           </g>
 
           <!-- 报错时：蚊香眼 -->
@@ -415,9 +417,12 @@ const replacementCode = `function scheduleSemanticUpdate() {
             <rect id="right-blink" class="blink-el" x="10.5" y="7" width="2.2" height="0.8" fill="#2d3748" style="display:none;"/>
           </g>
 
-          <g id="agy-star-eyes" style="display:none;">
-            <polygon points="6.5,5.8 7,7.1 8.3,7.1 7.3,7.9 7.7,9.1 6.5,8.3 5.3,9.1 5.7,7.9 4.7,7.1 6,7.1" fill="#fbbf24"/>
-            <polygon points="11.5,5.8 12,7.1 13.3,7.1 12.3,7.9 12.7,9.1 11.5,8.3 10.3,9.1 10.7,7.9 9.7,7.1 11,7.1" fill="#fbbf24"/>
+          <!-- 完成时：元气弯弯笑眼 ^ ^ + 绯红腮红 -->
+          <g id="agy-happy-eyes" style="display:none;">
+            <path d="M5.3 7.5 C5.9 6.2 7.1 6.2 7.7 7.5" stroke="#2d3748" stroke-width="1.1" stroke-linecap="round" fill="none"/>
+            <path d="M10.3 7.5 C10.9 6.2 12.1 6.2 12.7 7.5" stroke="#2d3748" stroke-width="1.1" stroke-linecap="round" fill="none"/>
+            <ellipse cx="4.8" cy="8.6" rx="1.1" ry="0.6" fill="#f43f5e" opacity="0.65"/>
+            <ellipse cx="13.2" cy="8.6" rx="1.1" ry="0.6" fill="#f43f5e" opacity="0.65"/>
           </g>
 
           <g id="agy-dizzy-eyes" style="display:none;">
@@ -463,7 +468,19 @@ const replacementCode = `function scheduleSemanticUpdate() {
         style.textContent = \`
           @keyframes agy-pet-idle-subtle { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-1.5px); } }
           @keyframes agy-pet-bounce-pro { 0%, 100% { transform: translateY(0) scale(1,1); } 25% { transform: translateY(-10px) scale(0.9,1.15); } 50% { transform: translateY(-2px) scale(1.08,0.92); } 75% { transform: translateY(-5px) scale(0.96,1.04); } }
-          @keyframes agy-pet-flip-celebrate { 0% { transform: translateY(0) rotate(0deg) scale(1); } 40% { transform: translateY(-18px) rotate(-180deg) scale(1.15); } 80% { transform: translateY(-4px) rotate(-360deg) scale(1.05); } 100% { transform: translateY(0) rotate(-360deg) scale(1); } }
+          /* ✨ 元气二段跳雀跃动效 (Squash & Stretch) 彻底取代 360° 翻滚 */
+          @keyframes agy-pet-joy-hop {
+            0% { transform: translateY(0) scale(1, 1); }
+            12% { transform: translateY(2px) scale(1.15, 0.85); }
+            30% { transform: translateY(-15px) scale(0.9, 1.15) rotate(-3deg); }
+            48% { transform: translateY(0) scale(1.12, 0.88) rotate(2deg); }
+            65% { transform: translateY(-8px) scale(0.94, 1.08) rotate(3deg); }
+            80% { transform: translateY(0) scale(1.05, 0.95) rotate(-1deg); }
+            92% { transform: translateY(-2px) scale(1, 1) rotate(1deg); }
+            100% { transform: translateY(0) scale(1, 1) rotate(0deg); }
+          }
+          @keyframes agy-puppy-celebrate-ear { 0% { transform: rotate(-16deg); } 100% { transform: rotate(16deg); } }
+          @keyframes agy-octopus-celebrate-leg { 0% { transform: translateY(0) scaleY(1); } 100% { transform: translateY(-3px) scaleY(0.7); } }
           @keyframes agy-heart-float-pro { 0% { opacity:0; transform:translateY(0) scale(0.6); } 25% { opacity:1; transform:translateY(-10px) scale(1.1); } 100% { opacity:0; transform:translateY(-26px) scale(1.3); } }
           @keyframes agy-thought-float-anim { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-3px); } }
           @keyframes agy-leg-type-odd { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-2.2px); } }
@@ -471,11 +488,30 @@ const replacementCode = `function scheduleSemanticUpdate() {
           @keyframes agy-puppy-ear-perk { 0%, 100% { transform: rotate(0deg); } 50% { transform: rotate(-8deg); } }
           @keyframes agy-spin-gear { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
           @keyframes agy-steam-rise { 0% { opacity:0; transform:translateY(0); } 50% { opacity:0.8; } 100% { opacity:0; transform:translateY(-3px); } }
-          @keyframes agy-confetti-burst { 0% { opacity:1; transform:translate(0,0) scale(1); } 100% { opacity:0; transform:translate(var(--tx),var(--ty)) scale(0.5); } }
+          
+          /* 真实弧线彩带与花瓣雨飘落 */
+          @keyframes agy-confetti-flutter {
+            0% { opacity: 0; transform: translate(0, 0) scale(0) rotate(0deg); }
+            15% { opacity: 1; transform: translate(var(--arc-x), var(--peak-y)) scale(1) rotate(var(--rot-1)); }
+            50% { opacity: 1; transform: translate(calc(var(--arc-x) * 1.4 + var(--drift-x) * 0.4), calc(var(--peak-y) * 0.55)) scale(0.95) rotate(var(--rot-2)); }
+            85% { opacity: 0.9; transform: translate(calc(var(--arc-x) * 1.7 + var(--drift-x)), calc(var(--peak-y) * 0.1)) scale(0.9) rotate(var(--rot-3)); }
+            100% { opacity: 0; transform: translate(calc(var(--arc-x) * 1.9 + var(--drift-x) * 1.2), var(--fall-y)) scale(0.6) rotate(var(--rot-4)); }
+          }
+          @keyframes agy-badge-pop-in {
+            0% { opacity: 0; transform: translateY(6px) scale(0.7); }
+            25% { opacity: 1; transform: translateY(-4px) scale(1.08); }
+            40% { transform: translateY(0) scale(1); }
+            85% { opacity: 1; transform: translateY(0) scale(1); }
+            100% { opacity: 0; transform: translateY(-6px) scale(0.9); }
+          }
 
           .agy-pet-idle-anim { animation: agy-pet-idle-subtle 2.8s ease-in-out infinite; }
           .agy-pet-bounce-anim { animation: agy-pet-bounce-pro 0.55s cubic-bezier(0.17, 0.89, 0.32, 1.28); }
-          .agy-pet-celebrate-anim { animation: agy-pet-flip-celebrate 0.85s cubic-bezier(0.2, 0.8, 0.25, 1); }
+          .agy-pet-celebrate-anim { animation: agy-pet-joy-hop 1.1s cubic-bezier(0.28, 0.84, 0.42, 1); }
+          .agy-celebrating .puppy-ear { animation: agy-puppy-celebrate-ear 0.24s infinite alternate ease-in-out; }
+          .agy-celebrating .leg-odd { animation: agy-octopus-celebrate-leg 0.2s infinite alternate ease-in-out; }
+          .agy-celebrating .leg-even { animation: agy-octopus-celebrate-leg 0.2s infinite alternate-reverse ease-in-out; }
+          .agy-celebrate-badge { animation: agy-badge-pop-in 2.4s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
           .agy-thought-float { animation: agy-thought-float-anim 2.2s ease-in-out infinite; }
           .agy-spin-gear { transform-origin: 6px 6px; animation: agy-spin-gear 1.8s linear infinite; }
           .agy-steam { animation: agy-steam-rise 1.4s ease-out infinite; }
@@ -550,15 +586,20 @@ const replacementCode = `function scheduleSemanticUpdate() {
         const thinkingBubble = pet.querySelector('#agy-thinking-bubble');
         const miniKb = pet.querySelector('#mini-kb');
         const normalEyes = pet.querySelector('#agy-normal-eyes');
-        const starEyes = pet.querySelector('#agy-star-eyes');
+        const happyEyes = pet.querySelector('#agy-happy-eyes');
         const dizzyEyes = pet.querySelector('#agy-dizzy-eyes');
         const goggles = pet.querySelector('#agy-acc-goggles');
         const coffee = pet.querySelector('#agy-acc-coffee');
         const sprout = pet.querySelector('#agy-acc-sprout');
         const pupils = pet.querySelectorAll('.pupil-el');
+        const celebrateBadge = pet.querySelector('#agy-celebrate-badge');
 
         if (thinkingBubble) {
             thinkingBubble.style.display = agyAgentState === 'THINKING' ? 'flex' : 'none';
+        }
+
+        if (celebrateBadge && agyAgentState !== 'SUCCESS') {
+            celebrateBadge.style.display = 'none';
         }
 
         if (agyAgentState === 'THINKING') {
@@ -569,7 +610,7 @@ const replacementCode = `function scheduleSemanticUpdate() {
 
         if (miniKb) miniKb.style.display = (agyIsTyping || agyAgentState === 'CODING') ? 'block' : 'none';
         if (normalEyes) normalEyes.style.display = (agyAgentState === 'SUCCESS' || agyAgentState === 'ERROR') ? 'none' : 'block';
-        if (starEyes) starEyes.style.display = agyAgentState === 'SUCCESS' ? 'block' : 'none';
+        if (happyEyes) happyEyes.style.display = agyAgentState === 'SUCCESS' ? 'block' : 'none';
         if (dizzyEyes) dizzyEyes.style.display = agyAgentState === 'ERROR' ? 'block' : 'none';
 
         if (goggles) goggles.style.display = (agyCurrentAcc === 'goggles' || agyAgentState === 'CODING') ? 'block' : 'none';
@@ -591,32 +632,64 @@ const replacementCode = `function scheduleSemanticUpdate() {
 
         agyAgentState = 'SUCCESS';
         applyAgyPetVisuals();
-        sprite.classList.add('agy-pet-celebrate-anim');
+        sprite.classList.add('agy-pet-celebrate-anim', 'agy-celebrating');
         playAgySuccessSound();
 
-        // 喷发彩纸粒子
+        // 浮现成就胶囊徽章
+        const badge = pet.querySelector('#agy-celebrate-badge');
+        if (badge) {
+            badge.style.display = 'flex';
+        }
+
+        // 喷发真实抛物线彩带与花瓣雨
         const confettiContainer = pet.querySelector('#agy-confetti-container');
         if (confettiContainer) {
             confettiContainer.innerHTML = '';
-            const colors = ['#f43f5e', '#38bdf8', '#fbbf24', '#4ade80', '#a855f7'];
-            for (let i = 0; i < 16; i++) {
-                const c = document.createElement('div');
+            const colors = ['#ff4757', '#ffa502', '#2ed573', '#1e90ff', '#a55eea', '#ff9ff3', '#feca57', '#00d2d3'];
+            const shapes = ['ribbon', 'petal', 'star'];
+            const count = 30;
+
+            for (let i = 0; i < count; i++) {
+                const piece = document.createElement('div');
                 const color = colors[i % colors.length];
-                const tx = (Math.random() - 0.5) * 55;
-                const ty = -14 - Math.random() * 26;
-                c.style.cssText = \`position:absolute;width:4px;height:4px;background:\${color};border-radius:1px;--tx:\${tx}px;--ty:\${ty}px;animation:agy-confetti-burst 0.85s forwards ease-out;\`;
-                confettiContainer.appendChild(c);
+                const shape = shapes[i % shapes.length];
+
+                const isLeft = i % 2 === 0;
+                const arcDir = isLeft ? -1 : 1;
+                const arcX = arcDir * (14 + Math.random() * 30);
+                const peakY = -35 - Math.random() * 45;
+                const driftX = (Math.random() - 0.5) * 45;
+                const fallY = 12 + Math.random() * 32;
+
+                const r1 = (Math.random() * 180 - 90) + 'deg';
+                const r2 = (Math.random() * 360 - 180) + 'deg';
+                const r3 = (Math.random() * 540 - 270) + 'deg';
+                const r4 = (Math.random() * 720 - 360) + 'deg';
+
+                const dur = (1.4 + Math.random() * 0.7).toFixed(2);
+                const delay = (Math.random() * 0.16).toFixed(2);
+
+                let shapeStyle = '';
+                if (shape === 'ribbon') {
+                    shapeStyle = 'width:6px;height:3px;border-radius:1px;';
+                } else if (shape === 'petal') {
+                    shapeStyle = 'width:5px;height:5px;border-radius:50%;';
+                } else {
+                    shapeStyle = 'width:4px;height:4px;transform:rotate(45deg);border-radius:0.5px;';
+                }
+
+                piece.style.cssText = \`position:absolute;left:50%;bottom:12px;\${shapeStyle}background:\${color};pointer-events:none;--arc-x:\${arcX}px;--peak-y:\${peakY}px;--drift-x:\${driftX}px;--fall-y:\${fallY}px;--rot-1:\${r1};--rot-2:\${r2};--rot-3:\${r3};--rot-4:\${r4};animation:agy-confetti-flutter \${dur}s \${delay}s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;box-shadow:0 1px 3px rgba(0,0,0,0.18);\`;
+                confettiContainer.appendChild(piece);
             }
-            setTimeout(() => { confettiContainer.innerHTML = ''; }, 900);
+            setTimeout(() => { confettiContainer.innerHTML = ''; }, 2500);
         }
 
-        showPetBubble('任务圆满完成！🎉');
-
         setTimeout(() => {
-            sprite.classList.remove('agy-pet-celebrate-anim');
+            sprite.classList.remove('agy-pet-celebrate-anim', 'agy-celebrating');
+            if (badge) badge.style.display = 'none';
             agyAgentState = 'IDLE';
             applyAgyPetVisuals();
-        }, 3200);
+        }, 2500);
     }
 
     function showPetBubble(text) {
@@ -737,7 +810,8 @@ const replacementCode = `function scheduleSemanticUpdate() {
           </div>
           <div id="agy-pet-bubble" style="position:absolute;bottom:100%;margin-bottom:6px;padding:3px 9px;border-radius:6px;background:rgba(24,28,36,0.92);border:1px solid rgba(255,255,255,0.18);color:#f1f5f9;font-size:11px;white-space:nowrap;box-shadow:0 4px 12px rgba(0,0,0,0.3);opacity:0;pointer-events:none;transition:all 0.2s ease;transform:translateY(3px);">戳我一下~</div>
           <div id="agy-heart-burst" style="position:absolute;bottom:100%;pointer-events:none;opacity:0;font-size:12px;">❤️</div>
-          <div id="agy-confetti-container" style="position:absolute;bottom:100%;pointer-events:none;"></div>
+          <div id="agy-confetti-container" style="position:absolute;bottom:12px;left:50%;transform:translateX(-50%);pointer-events:none;width:0;height:0;z-index:58;"></div>
+          <div id="agy-celebrate-badge" class="agy-celebrate-badge" style="position:absolute;bottom:42px;white-space:nowrap;padding:3px 10px;border-radius:9999px;background:rgba(15,23,42,0.95);border:1px solid rgba(74,222,128,0.55);color:#4ade80;font-size:11px;font-weight:600;box-shadow:0 6px 18px rgba(0,0,0,0.4),0 0 12px rgba(74,222,128,0.25);pointer-events:none;z-index:60;display:none;align-items:center;gap:4px;"><span>✨ 任务圆满达成！🎉</span></div>
           <div id="agy-pet-sprite" class="agy-pet-idle-anim" style="transform-origin:bottom center;">
             \${AGY_PET_SVGS[agyCurrentPet] || AGY_PET_SVGS.octopus}
           </div>
