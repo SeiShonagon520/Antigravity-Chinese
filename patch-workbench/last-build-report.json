@@ -4,14 +4,14 @@
   "officialVersion": "2.18.1",
   "officialSha256": "3c03ce352dc3c1b43f357c27ead1f73c74d198a8ded89b1b3d6a2539e7a6ac5c",
   "outputAsar": "D:\\github\\Antigravity-Chinese\\assets\\app.asar",
-  "outputSize": 5113095,
-  "outputSha256": "88a91c4345d7c48e10483fdc102d981a2f7bb16baaa0adb1315a9074ee72092c",
+  "outputSize": 5123605,
+  "outputSha256": "bda0611730b991f04000f1705880069acd98e1889721d9bb1e2bbf44ac5ad8c1",
   "compatibility": {
     "files": [
       {
         "file": "dist/preload.js",
         "officialBytes": 5151,
-        "rebuiltBytes": 375299
+        "rebuiltBytes": 385805
       },
       {
         "file": "dist/main.js",
@@ -84,7 +84,7 @@
       {
         "index": 9,
         "file": "dist/preload.js",
-        "description": "Inject in-UI branch conversation button, modal, and Ctrl+Shift+B shortcut into preload",
+        "description": "Inject in-UI branch conversation button, modal, shortcut Ctrl+Shift+B, and standing composer pet into preload",
         "hits": 1
       },
       {

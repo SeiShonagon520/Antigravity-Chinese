@@ -19,6 +19,6 @@
     "dist/accountVault.js"
   ],
   "officialSha256": "3c03ce352dc3c1b43f357c27ead1f73c74d198a8ded89b1b3d6a2539e7a6ac5c",
-  "patchSha256": "88a91c4345d7c48e10483fdc102d981a2f7bb16baaa0adb1315a9074ee72092c",
-  "builtAt": "2026-10-01T07:32:10.829Z"
+  "patchSha256": "bda0611730b991f04000f1705880069acd98e1889721d9bb1e2bbf44ac5ad8c1",
+  "builtAt": "2026-10-01T08:08:40.833Z"
 }
