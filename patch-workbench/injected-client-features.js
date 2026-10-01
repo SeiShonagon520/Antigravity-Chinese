@@ -283,7 +283,10 @@ let agyIdleTimer = null;
 let agyIsPeeking = false;
 let isDraggingPet = false;
 let dragStartX = 0;
+let dragStartY = 0;
 let dragLastX = 0;
+let dragLastY = 0;
+let currentLiftY = -12;
 let dragStartOffset = agyPetOffset;
 let dragMovedDistance = 0;
 
@@ -336,6 +339,27 @@ function playAgySuccessSound() {
             osc.start(now + idx * 0.06);
             osc.stop(now + idx * 0.06 + 0.16);
         });
+    } catch (_) {}
+}
+
+function playAgyDropSound() {
+    if (!agySoundEnabled) return;
+    try {
+        const ctx = getAgyAudioContext();
+        if (!ctx) return;
+        const now = ctx.currentTime;
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(420, now);
+        osc.frequency.exponentialRampToValueAtTime(180, now + 0.05);
+        osc.frequency.exponentialRampToValueAtTime(680, now + 0.12);
+        gain.gain.setValueAtTime(0.14, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.14);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(now);
+        osc.stop(now + 0.14);
     } catch (_) {}
 }
 
@@ -572,10 +596,11 @@ function ensureAgyPetStyles() {
         100% { transform: translateY(-3.5px) rotate(16deg); }
       }
       @keyframes agy-pudding-drop-squash {
-        0% { transform: translateY(-8px) scale(0.88, 1.16); }
-        35% { transform: translateY(3.5px) scale(1.26, 0.74); }
-        60% { transform: translateY(-5px) scale(0.92, 1.1); }
-        80% { transform: translateY(1px) scale(1.05, 0.96); }
+        0% { transform: translateY(var(--drop-from-y, -12px)) scale(0.86, 1.18); }
+        32% { transform: translateY(4px) scale(1.32, 0.68); }
+        58% { transform: translateY(-6px) scale(0.9, 1.12); }
+        78% { transform: translateY(1.5px) scale(1.06, 0.94); }
+        90% { transform: translateY(-1px) scale(0.98, 1.02); }
         100% { transform: translateY(0) scale(1, 1); }
       }
 
@@ -593,7 +618,7 @@ function ensureAgyPetStyles() {
       .agy-pet-peeking { animation: agy-pet-peek-anim 1.4s ease-in-out; }
       .agy-pet-sleeping { animation: agy-pet-sleep-breath 3.6s ease-in-out infinite; }
       .agy-pet-launching { animation: agy-pet-launch-push 0.65s cubic-bezier(0.18, 0.89, 0.32, 1.25); }
-      .agy-pet-lifted { transform: translateY(-8px) scale(0.88, 1.16) !important; cursor: grabbing !important; }
+      .agy-pet-lifted { cursor: grabbing !important; }
       .agy-pet-lifted .leg-odd { animation: agy-drag-scramble-limbs 0.11s infinite alternate ease-in-out; }
       .agy-pet-lifted .leg-even { animation: agy-drag-scramble-limbs 0.11s infinite alternate-reverse ease-in-out; }
       .agy-pet-lifted .puppy-ear { animation: agy-puppy-celebrate-ear 0.12s infinite alternate ease-in-out; }
@@ -1040,8 +1065,11 @@ function injectComposerPet() {
     `;
 
     // ✨ 细节 4：拖拽工位「悬空挣扎与软泥落水感」
+    pet.addEventListener('dragstart', (e) => e.preventDefault());
+
     pet.addEventListener('mousedown', (e) => {
         if (e.button !== 0) return; // 仅左键拖拽
+        e.preventDefault(); // 关键！阻断浏览器默认 HTML5 拖拽与文本选区，彻底避免 mouseup 丢失
         if (agyIsSleeping) wakeAgyPetUp();
         if (agyIsPeeking) {
             clearTimeout(agyPeekTimer);
@@ -1051,15 +1079,19 @@ function injectComposerPet() {
         }
         isDraggingPet = true;
         dragStartX = e.clientX;
+        dragStartY = e.clientY;
         dragLastX = e.clientX;
+        dragLastY = e.clientY;
         dragStartOffset = agyPetOffset;
         dragMovedDistance = 0;
+        currentLiftY = -12;
         pet.style.cursor = 'grabbing';
 
         const sprite = pet.querySelector('#agy-pet-sprite');
         if (sprite) {
             sprite.classList.remove('agy-pudding-landing', 'agy-pet-idle-anim', 'agy-patrol-mode');
             sprite.classList.add('agy-pet-lifted');
+            sprite.style.transform = 'translateY(-12px) scale(0.86, 1.18)';
         }
         const pupils = pet.querySelectorAll('.pupil-el');
         pupils.forEach(p => p.style.transform = 'translate(0, 0.8px)');
@@ -1067,51 +1099,66 @@ function injectComposerPet() {
 
     window.addEventListener('mousemove', (e) => {
         if (!isDraggingPet) return;
-        const delta = dragStartX - e.clientX;
-        dragMovedDistance += Math.abs(delta);
+        const deltaX = dragStartX - e.clientX;
+        const moveStep = Math.hypot(e.clientX - dragLastX, e.clientY - dragLastY);
+        dragMovedDistance += moveStep;
+
         const comp = findAgyComposerContainer();
-        const maxOffset = comp ? comp.clientWidth - 50 : 300;
-        agyPetOffset = Math.max(16, Math.min(maxOffset, dragStartOffset + delta));
+        const maxOffset = Math.max(60, (comp ? comp.clientWidth : 300) - 52);
+        agyPetOffset = Math.max(24, Math.min(maxOffset, dragStartOffset + deltaX));
         pet.style.right = agyPetOffset + 'px';
 
+        // 垂直高度实时跟随鼠标上拉 (真实悬空拔高体感)
+        const pullY = e.clientY - dragStartY;
+        const liftY = Math.min(-6, Math.max(-60, pullY < 0 ? pullY : -8));
+        currentLiftY = liftY;
+
+        // 水平移动速度倾角
         const speedX = e.clientX - dragLastX;
         dragLastX = e.clientX;
-        const tilt = Math.max(-12, Math.min(12, speedX * 1.5));
+        dragLastY = e.clientY;
+        const tilt = Math.max(-14, Math.min(14, speedX * 1.5));
+
         const sprite = pet.querySelector('#agy-pet-sprite');
         if (sprite) {
-            sprite.style.transform = `translateY(-8px) scale(0.88, 1.16) rotate(${tilt}deg)`;
+            sprite.style.transform = `translateY(${liftY}px) scale(0.86, 1.18) rotate(${tilt}deg)`;
         }
     });
 
-    window.addEventListener('mouseup', () => {
-        if (isDraggingPet) {
-            isDraggingPet = false;
-            pet.style.cursor = 'grab';
-            localStorage.setItem('agy-pet-offset', String(Math.round(agyPetOffset)));
+    function handlePetDragEnd() {
+        if (!isDraggingPet) return;
+        isDraggingPet = false;
+        pet.style.cursor = 'grab';
+        localStorage.setItem('agy-pet-offset', String(Math.round(agyPetOffset)));
 
-            const sprite = pet.querySelector('#agy-pet-sprite');
-            if (sprite) {
-                sprite.style.transform = '';
-                sprite.classList.remove('agy-pet-lifted');
-                sprite.classList.add('agy-pudding-landing');
-                setTimeout(() => {
-                    if (sprite) {
-                        sprite.classList.remove('agy-pudding-landing');
-                        sprite.classList.add('agy-pet-idle-anim');
-                    }
-                }, 550);
-            }
-            const pupils = pet.querySelectorAll('.pupil-el');
-            pupils.forEach(p => p.style.transform = 'translate(0, 0)');
-            playAgyPopSound();
-
-            if (dragMovedDistance < 6) {
-                handlePetClick();
-            } else {
-                showPetBubble('呼~ 软泥吸附好啦 🛋️');
-            }
+        const sprite = pet.querySelector('#agy-pet-sprite');
+        if (sprite) {
+            sprite.style.setProperty('--drop-from-y', `${currentLiftY}px`);
+            sprite.style.transform = '';
+            sprite.classList.remove('agy-pet-lifted');
+            sprite.classList.add('agy-pudding-landing');
+            setTimeout(() => {
+                if (sprite) {
+                    sprite.classList.remove('agy-pudding-landing');
+                    sprite.classList.add('agy-pet-idle-anim');
+                }
+            }, 550);
         }
-    });
+        const pupils = pet.querySelectorAll('.pupil-el');
+        pupils.forEach(p => p.style.transform = 'translate(0, 0)');
+
+        if (dragMovedDistance < 5) {
+            // 点击抚摸
+            handlePetClick();
+        } else {
+            playAgyDropSound();
+            showPetBubble('呼~ 软泥吸附好啦 🛋️');
+        }
+    }
+
+    window.addEventListener('mouseup', handlePetDragEnd);
+    window.addEventListener('pointerup', handlePetDragEnd);
+    window.addEventListener('blur', handlePetDragEnd);
 
     function handlePetClick() {
         if (agyIsPetBouncing) return;
