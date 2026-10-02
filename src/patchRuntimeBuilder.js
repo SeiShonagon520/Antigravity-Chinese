@@ -108,9 +108,11 @@ function resolveUnpackedSource(archivePath) {
   const candidates = [`${archivePath}.unpacked`];
   if (archivePath.endsWith('.original')) {
     candidates.push(`${archivePath.slice(0, -'.original'.length)}.unpacked.original`);
+    candidates.push(`${archivePath.slice(0, -'.original'.length)}.unpacked`);
   }
   if (archivePath.endsWith('.previous')) {
     candidates.push(`${archivePath.slice(0, -'.previous'.length)}.unpacked.previous`);
+    candidates.push(`${archivePath.slice(0, -'.previous'.length)}.unpacked`);
   }
   return candidates.find(candidate => fs.existsSync(candidate)) || '';
 }

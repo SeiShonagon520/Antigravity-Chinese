@@ -1,27 +1,27 @@
 {
   "ok": true,
   "officialAsar": "C:\\Users\\L\\AppData\\Local\\Programs\\Antigravity\\resources\\app.asar.original",
-  "officialVersion": "2.18.1",
-  "officialSha256": "3c03ce352dc3c1b43f357c27ead1f73c74d198a8ded89b1b3d6a2539e7a6ac5c",
+  "officialVersion": "2.19.1",
+  "officialSha256": "341234faf45bd1776fd5418a3c288dedc5487ebfcf153f53d75de17cfe15c1de",
   "outputAsar": "D:\\github\\Antigravity-Chinese\\assets\\app.asar",
-  "outputSize": 5190053,
-  "outputSha256": "7be1d2be49fa6ce6722c5483abf118229f0eaaaff016b3c7fedf2c9aa5a2dc17",
+  "outputSize": 5199452,
+  "outputSha256": "1201cdfb828a6938702f39a733ca0e3e7a4769d5dd625d25d02aecf189b18ea1",
   "compatibility": {
     "files": [
       {
         "file": "dist/preload.js",
-        "officialBytes": 5151,
-        "rebuiltBytes": 451956
+        "officialBytes": 5337,
+        "rebuiltBytes": 452142
       },
       {
         "file": "dist/main.js",
-        "officialBytes": 19873,
-        "rebuiltBytes": 33144
+        "officialBytes": 20023,
+        "rebuiltBytes": 33294
       },
       {
         "file": "dist/tray.js",
-        "officialBytes": 3669,
-        "rebuiltBytes": 4982
+        "officialBytes": 3765,
+        "rebuiltBytes": 5078
       },
       {
         "file": "dist/utils.js",
@@ -30,8 +30,8 @@
       },
       {
         "file": "dist/ipcHandlers.js",
-        "officialBytes": 14110,
-        "rebuiltBytes": 111007
+        "officialBytes": 16557,
+        "rebuiltBytes": 113454
       },
       {
         "file": "dist/languageServer.js",
