@@ -282,6 +282,7 @@ let agyIsSleeping = false;
 let agyIdleTimer = null;
 let agyIsPeeking = false;
 let isDraggingPet = false;
+let agyIsLanding = false; // ✨ 原地软泥着陆锁定状态：落地 Q 弹吸附彻底完成前锁定水平位移，防止提前起步漫步
 let dragStartX = 0;
 let dragStartY = 0;
 let dragLastX = 0;
@@ -685,15 +686,35 @@ function schedulePetBlink() {
 function findAgyComposerContainer() {
     const sideInput = document.getElementById('antigravity.agentSidePanelInputBox');
     if (sideInput) {
-        const inner = Array.from(sideInput.children).find(c => String(c.className || '').includes('bg-card')) || sideInput.firstElementChild || sideInput;
-        if (inner && inner.offsetParent !== null) return inner;
+        // 关键：在 sideInput 子元素中精准查找包含真实输入框（textarea 或 contenteditable）的容器！
+        // 绝不能匹配到上方动态出现的「N 个文件已更改 / 审核」diff 卡片或辅助条
+        const inputChild = Array.from(sideInput.children).find(c => {
+            return c.querySelector('textarea, [contenteditable="true"]') !== null;
+        });
+        if (inputChild && inputChild.offsetParent !== null) return inputChild;
+
+        // 排除包含审核按钮、diff、更改提示的子卡片
+        const composerCandidates = Array.from(sideInput.children).filter(c => {
+            const hasReviewBtn = c.querySelector('button[title*="审核"], button[aria-label*="审核"], [class*="diff"], [class*="change"]') !== null;
+            if (hasReviewBtn && !c.querySelector('textarea, [contenteditable="true"]')) return false;
+            return true;
+        });
+
+        const cardCandidate = composerCandidates.find(c => {
+            return c.querySelector('[data-agy-control="send"], button[type="submit"]') ||
+                   c.querySelector('[aria-label*="模型"], [aria-label*="Model"]') ||
+                   String(c.className || '').includes('bg-card');
+        });
+        if (cardCandidate && cardCandidate.offsetParent !== null) return cardCandidate;
+
+        // 兜底：取最后一个子元素 (真实输入栏永远位于整个区域底部)
+        const lastChild = sideInput.lastElementChild;
+        if (lastChild && lastChild.offsetParent !== null) return lastChild;
     }
-    const agyComposer = document.querySelector('[data-agy-component="composer-inner"]') || document.querySelector('[data-agy-component="composer"]');
-    if (agyComposer && agyComposer.offsetParent !== null) return agyComposer;
 
     const textareas = Array.from(document.querySelectorAll('textarea, [contenteditable="true"]')).filter(el => {
         const rect = el.getBoundingClientRect();
-        return rect.width > 50 && rect.height > 15;
+        return rect.width > 50 && rect.height > 15 && el.offsetParent !== null;
     });
     if (textareas.length > 0) {
         const ta = textareas[textareas.length - 1];
@@ -709,6 +730,10 @@ function findAgyComposerContainer() {
         }
         return best;
     }
+
+    const agyComposer = document.querySelector('[data-agy-component="composer-inner"]') || document.querySelector('[data-agy-component="composer"]');
+    if (agyComposer && agyComposer.offsetParent !== null && agyComposer.querySelector('textarea, [contenteditable="true"]')) return agyComposer;
+
     return null;
 }
 
@@ -904,11 +929,11 @@ setInterval(() => {
 let agyPatrolDir = 1;
 let agyPeekTimer = null;
 setInterval(() => {
-    if (!agyPatrolEnabled || agyIsTyping || agyAgentState !== 'IDLE' || agyIsSleeping || agyIsPeeking || isDraggingPet) {
+    if (!agyPatrolEnabled || agyIsTyping || agyAgentState !== 'IDLE' || agyIsSleeping || agyIsPeeking || isDraggingPet || agyIsLanding) {
         const pet = document.getElementById('agy-composer-pet');
         if (pet) {
             const sprite = pet.querySelector('#agy-pet-sprite');
-            if (sprite && !agyIsPeeking && !agyIsSleeping) sprite.classList.remove('agy-patrol-mode');
+            if (sprite && !agyIsPeeking && !agyIsSleeping && !isDraggingPet && !agyIsLanding) sprite.classList.remove('agy-patrol-mode');
         }
         return;
     }
@@ -1040,6 +1065,7 @@ function triggerAgyLaunchPush() {
 
 // 注入主逻辑
 function injectComposerPet() {
+    if (isDraggingPet || agyIsLanding) return; // 正在拖拽或落地反弹期间绝不重建或打断宠物！
     ensureAgyPetStyles();
     const composer = findAgyComposerContainer();
     if (!composer) return;
@@ -1313,6 +1339,7 @@ function injectComposerPet() {
     pet.addEventListener('mousedown', (e) => {
         if (e.button !== 0) return; // 仅左键拖拽
         e.preventDefault(); // 关键！阻断浏览器默认 HTML5 拖拽与文本选区，彻底避免 mouseup 丢失
+        if (agyIsLanding) return; // 正在就地落地吸附中时忽略重复抓取
         clearTimeout(agyManaHoverTimer);
         hideAgyManaHud(true); // 0ms 瞬间销毁/隐藏魔力试管，拖拽期间绝对不显示
         if (agyIsSleeping) wakeAgyPetUp();
@@ -1353,9 +1380,9 @@ function injectComposerPet() {
         agyPetOffset = Math.max(24, Math.min(maxOffset, dragStartOffset + deltaX));
         pet.style.right = agyPetOffset + 'px';
 
-        // 垂直高度实时跟随鼠标上拉 (真实悬空拔高体感)
+        // 垂直高度实时跟随鼠标上拉 (真实悬空拔高体感，最大可拉起 100px)
         const pullY = e.clientY - dragStartY;
-        const liftY = Math.min(-6, Math.max(-60, pullY < 0 ? pullY : -8));
+        const liftY = Math.min(0, Math.max(-100, pullY < 0 ? pullY : 0));
         currentLiftY = liftY;
 
         // 水平移动速度倾角
@@ -1373,30 +1400,44 @@ function injectComposerPet() {
     function handlePetDragEnd() {
         if (!isDraggingPet) return;
         isDraggingPet = false;
-        agyDragCooldownUntil = Date.now() + 550; // 落地软泥反弹期间锁定禁用 hover
         pet.style.cursor = 'grab';
         localStorage.setItem('agy-pet-offset', String(Math.round(agyPetOffset)));
 
-        const sprite = pet.querySelector('#agy-pet-sprite');
-        if (sprite) {
-            sprite.style.setProperty('--drop-from-y', `${currentLiftY}px`);
-            sprite.style.transform = '';
-            sprite.classList.remove('agy-pet-lifted');
-            sprite.classList.add('agy-pudding-landing');
-            setTimeout(() => {
-                if (sprite) {
-                    sprite.classList.remove('agy-pudding-landing');
-                    sprite.classList.add('agy-pet-idle-anim');
-                }
-            }, 550);
-        }
         const pupils = pet.querySelectorAll('.pupil-el');
         pupils.forEach(p => p.style.transform = 'translate(0, 0)');
 
         if (dragMovedDistance < 5) {
             // 点击抚摸
+            agyIsLanding = false;
+            const sprite = pet.querySelector('#agy-pet-sprite');
+            if (sprite) {
+                sprite.classList.remove('agy-pet-lifted');
+                sprite.style.transform = '';
+            }
             handlePetClick();
         } else {
+            // 真实释放：就地落水软泥吸附！
+            agyIsLanding = true; // 锁定原地着陆状态，落地完成前彻底禁止漫步位移
+            agyDragCooldownUntil = Date.now() + 650; // 落地反弹期间锁定禁用 hover
+
+            const sprite = pet.querySelector('#agy-pet-sprite');
+            if (sprite) {
+                const dropFrom = currentLiftY < -4 ? currentLiftY : -14;
+                sprite.style.setProperty('--drop-from-y', `${dropFrom}px`);
+                sprite.style.transform = '';
+                sprite.classList.remove('agy-pet-lifted', 'agy-patrol-mode');
+                sprite.classList.add('agy-pudding-landing');
+                setTimeout(() => {
+                    if (sprite) {
+                        sprite.classList.remove('agy-pudding-landing');
+                        sprite.classList.add('agy-pet-idle-anim');
+                    }
+                    agyIsLanding = false; // 着陆 Q 弹吸附彻底完成后，才解除锁定，恢复正常巡逻
+                }, 550);
+            } else {
+                agyIsLanding = false;
+            }
+
             playAgyDropSound();
             showPetBubble('呼~ 软泥吸附好啦 🛋️');
         }
@@ -1405,6 +1446,7 @@ function injectComposerPet() {
     window.addEventListener('mouseup', handlePetDragEnd);
     window.addEventListener('pointerup', handlePetDragEnd);
     window.addEventListener('blur', handlePetDragEnd);
+    document.addEventListener('mouseleave', handlePetDragEnd);
 
     function handlePetClick() {
         if (agyIsPetBouncing) return;
