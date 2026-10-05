@@ -356,6 +356,17 @@ function buildCompatibleTree(options) {
     syntaxCheck('dist/accountVault.js', fs.readFileSync(targetVault, 'utf8'));
     report.files.push({ file: 'dist/accountVault.js', addedByPatch: true, rebuiltBytes: fs.statSync(targetVault).size });
   }
+  const menuPath = path.join(officialDir, 'dist', 'menu.js');
+  if (fs.existsSync(menuPath)) {
+    let menuSource = fs.readFileSync(menuPath, 'utf8');
+    menuSource = menuSource.replace("label: 'New Window',", "label: '新建窗口',");
+    menuSource = menuSource.replace("label: 'Docs',", "label: '文档',");
+    menuSource = menuSource.replace("return { label: 'Connect to WSL', submenu };", "return { label: '连接到 WSL', submenu };");
+    menuSource = menuSource.replace("return { label: 'Reopen Locally', click:", "return { label: '在本地重新打开', click:");
+    syntaxCheck('dist/menu.js', menuSource);
+    fs.writeFileSync(menuPath, menuSource, 'utf8');
+    report.files.push({ file: 'dist/menu.js', rebuiltBytes: fs.statSync(menuPath).size });
+  }
   return report;
 }
 

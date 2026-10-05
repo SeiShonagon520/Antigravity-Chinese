@@ -4,14 +4,14 @@
   "officialVersion": "2.19.1",
   "officialSha256": "341234faf45bd1776fd5418a3c288dedc5487ebfcf153f53d75de17cfe15c1de",
   "outputAsar": "D:\\github\\Antigravity-Chinese\\assets\\app.asar",
-  "outputSize": 5205218,
-  "outputSha256": "b91eacfb12a3ad52aa0c9a1f6527bbeb665cf5e83a1123a6665a9402802b320f",
+  "outputSize": 5208181,
+  "outputSha256": "cfee08822e7aecf67cea4a6f6cce025248b9df82395f35b5eac8e1549fd406ce",
   "compatibility": {
     "files": [
       {
         "file": "dist/preload.js",
         "officialBytes": 5337,
-        "rebuiltBytes": 457908
+        "rebuiltBytes": 460857
       },
       {
         "file": "dist/main.js",
@@ -42,6 +42,10 @@
         "file": "dist/accountVault.js",
         "addedByPatch": true,
         "rebuiltBytes": 3402
+      },
+      {
+        "file": "dist/menu.js",
+        "rebuiltBytes": 6512
       }
     ],
     "appliedRuntimeRules": [
