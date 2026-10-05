@@ -1333,15 +1333,46 @@ function injectComposerPet() {
         hideAgyManaHud(false);
     });
 
-    // ✨ 细节 4：拖拽工位「悬空挣扎与软泥落水感」
+    // ✨ 细节 4：拖拽工位「悬空挣扎与软泥落水感」(五重安全防护架构)
+    let agyActivePointerId = null;
+
+    function createAgyDragShield() {
+        if (document.getElementById('agy-drag-shield')) return;
+        const shield = document.createElement('div');
+        shield.id = 'agy-drag-shield';
+        // 全局全屏透明防护罩，层级置顶，隔离底层所有 Monaco / iframes / webviews / diff 审查条的事件拦截与吞噬
+        shield.style.cssText = 'position:fixed;inset:0;width:100vw;height:100vh;z-index:2147483640;cursor:grabbing;background:transparent;user-select:none;-webkit-user-select:none;pointer-events:all;';
+        document.body.appendChild(shield);
+
+        shield.addEventListener('pointermove', onPetDragMove, { capture: true });
+        shield.addEventListener('mousemove', onPetDragMove, { capture: true });
+        shield.addEventListener('pointerup', handlePetDragEnd, { capture: true });
+        shield.addEventListener('mouseup', handlePetDragEnd, { capture: true });
+        shield.addEventListener('pointercancel', handlePetDragEnd, { capture: true });
+    }
+
+    function removeAgyDragShield() {
+        const shield = document.getElementById('agy-drag-shield');
+        if (shield) shield.remove();
+    }
+
     pet.addEventListener('dragstart', (e) => e.preventDefault());
 
-    pet.addEventListener('mousedown', (e) => {
-        if (e.button !== 0) return; // 仅左键拖拽
-        e.preventDefault(); // 关键！阻断浏览器默认 HTML5 拖拽与文本选区，彻底避免 mouseup 丢失
-        if (agyIsLanding) return; // 正在就地落地吸附中时忽略重复抓取
+    function onPetDragStart(e) {
+        if (e.button !== 0) return; // 仅响应左键
+        e.preventDefault();
+        e.stopPropagation();
+
+        // 异常自愈：若前次处于拖拽遗留态，再次点击直接触发平稳就地吸附
+        if (isDraggingPet) {
+            handlePetDragEnd(e);
+            return;
+        }
+
+        if (agyIsLanding) return; // 落地 Q 弹缓冲中忽略重复抓取
         clearTimeout(agyManaHoverTimer);
         hideAgyManaHud(true); // 0ms 瞬间销毁/隐藏魔力试管，拖拽期间绝对不显示
+
         if (agyIsSleeping) wakeAgyPetUp();
         if (agyIsPeeking) {
             clearTimeout(agyPeekTimer);
@@ -1349,7 +1380,9 @@ function injectComposerPet() {
             const sprite = pet.querySelector('#agy-pet-sprite');
             if (sprite) sprite.classList.remove('agy-pet-peeking');
         }
+
         isDraggingPet = true;
+        agyActivePointerId = (e.pointerId !== undefined && e.pointerId !== null) ? e.pointerId : null;
         dragStartX = e.clientX;
         dragStartY = e.clientY;
         dragLastX = e.clientX;
@@ -1359,6 +1392,16 @@ function injectComposerPet() {
         currentLiftY = -12;
         pet.style.cursor = 'grabbing';
 
+        // Layer 1: 指针原生捕获
+        if (agyActivePointerId !== null && typeof pet.setPointerCapture === 'function') {
+            try {
+                pet.setPointerCapture(agyActivePointerId);
+            } catch (_) {}
+        }
+
+        // Layer 2: 挂载全屏防吞噬透明防护罩
+        createAgyDragShield();
+
         const sprite = pet.querySelector('#agy-pet-sprite');
         if (sprite) {
             sprite.classList.remove('agy-pudding-landing', 'agy-pet-idle-anim', 'agy-patrol-mode');
@@ -1367,10 +1410,17 @@ function injectComposerPet() {
         }
         const pupils = pet.querySelectorAll('.pupil-el');
         pupils.forEach(p => p.style.transform = 'translate(0, 0.8px)');
-    });
+    }
 
-    window.addEventListener('mousemove', (e) => {
+    function onPetDragMove(e) {
         if (!isDraggingPet) return;
+
+        // Layer 5: 移动位掩码守卫 (检测到左键早已松开但事件被任何层吃掉，立即自愈落地)
+        if (e.buttons !== undefined && (e.buttons & 1) === 0) {
+            handlePetDragEnd(e);
+            return;
+        }
+
         const deltaX = dragStartX - e.clientX;
         const moveStep = Math.hypot(e.clientX - dragLastX, e.clientY - dragLastY);
         dragMovedDistance += moveStep;
@@ -1380,9 +1430,17 @@ function injectComposerPet() {
         agyPetOffset = Math.max(24, Math.min(maxOffset, dragStartOffset + deltaX));
         pet.style.right = agyPetOffset + 'px';
 
-        // 垂直高度实时跟随鼠标上拉 (真实悬空拔高体感，最大可拉起 100px)
-        const pullY = e.clientY - dragStartY;
-        const liftY = Math.min(0, Math.max(-100, pullY < 0 ? pullY : 0));
+        // 真实果冻弹性拔高 (前 40px 等比，随后阻尼衰减，软上限 75px，绝不飘出工作区)
+        const pullUp = Math.max(0, dragStartY - e.clientY);
+        let liftY = 0;
+        if (pullUp > 0) {
+            if (pullUp <= 40) {
+                liftY = -pullUp;
+            } else {
+                liftY = -(40 + Math.sqrt(pullUp - 40) * 4.2);
+            }
+            liftY = Math.max(-75, liftY);
+        }
         currentLiftY = liftY;
 
         // 水平移动速度倾角
@@ -1395,12 +1453,21 @@ function injectComposerPet() {
         if (sprite) {
             sprite.style.transform = `translateY(${liftY}px) scale(0.86, 1.18) rotate(${tilt}deg)`;
         }
-    });
+    }
 
-    function handlePetDragEnd() {
+    function handlePetDragEnd(e) {
         if (!isDraggingPet) return;
         isDraggingPet = false;
         pet.style.cursor = 'grab';
+        removeAgyDragShield();
+
+        if (agyActivePointerId !== null && typeof pet.releasePointerCapture === 'function') {
+            try {
+                pet.releasePointerCapture(agyActivePointerId);
+            } catch (_) {}
+            agyActivePointerId = null;
+        }
+
         localStorage.setItem('agy-pet-offset', String(Math.round(agyPetOffset)));
 
         const pupils = pet.querySelectorAll('.pupil-el');
@@ -1443,10 +1510,18 @@ function injectComposerPet() {
         }
     }
 
-    window.addEventListener('mouseup', handlePetDragEnd);
-    window.addEventListener('pointerup', handlePetDragEnd);
-    window.addEventListener('blur', handlePetDragEnd);
-    document.addEventListener('mouseleave', handlePetDragEnd);
+    pet.addEventListener('pointerdown', onPetDragStart);
+    pet.addEventListener('mousedown', onPetDragStart);
+    pet.addEventListener('lostpointercapture', handlePetDragEnd);
+
+    // Layer 3: 全局双重捕获阶段监听 (capture: true，在任何子元素 stopPropagation 之前必先触发)
+    window.addEventListener('pointermove', onPetDragMove, { capture: true, passive: true });
+    window.addEventListener('mousemove', onPetDragMove, { capture: true, passive: true });
+    window.addEventListener('pointerup', handlePetDragEnd, { capture: true });
+    window.addEventListener('mouseup', handlePetDragEnd, { capture: true });
+    window.addEventListener('pointercancel', handlePetDragEnd, { capture: true });
+    window.addEventListener('blur', handlePetDragEnd, { capture: true });
+    document.addEventListener('mouseleave', handlePetDragEnd, { capture: true });
 
     function handlePetClick() {
         if (agyIsPetBouncing) return;
