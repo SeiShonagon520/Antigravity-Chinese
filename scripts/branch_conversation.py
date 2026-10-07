@@ -1,11 +1,21 @@
 import os
 import sys
+import io
 import json
 import uuid
 import shutil
 import sqlite3
 import pathlib
 from datetime import datetime, timezone
+
+# 强制标准流为 UTF-8 编码，防止 Windows CP936 中文与 Emoji 乱码或编码异常
+if sys.platform == "win32":
+    if hasattr(sys.stdout, 'buffer'):
+        sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+    if hasattr(sys.stderr, 'buffer'):
+        sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
+    if hasattr(sys.stdin, 'buffer'):
+        sys.stdin = io.TextIOWrapper(sys.stdin.buffer, encoding='utf-8', errors='replace')
 
 def get_gemini_dir():
     return pathlib.Path.home() / ".gemini" / "antigravity"
@@ -18,7 +28,7 @@ def get_latest_conversation_id():
     if not db_path.exists():
         return None
     conn = sqlite3.connect(db_path)
-    row = conn.execute("SELECT conversation_id FROM conversation_summaries ORDER BY last_modified_time DESC LIMIT 1").fetchone()
+    row = conn.execute("SELECT conversation_id FROM conversation_summaries WHERE parent_conversation_id = '' ORDER BY last_modified_time DESC LIMIT 1").fetchone()
     conn.close()
     return row[0] if row else None
 
@@ -32,8 +42,11 @@ def find_prune_step(source_id, turn_index=None, snippet=None):
     current_turn = None
     with open(log_path, "r", encoding="utf-8", errors="ignore") as f:
         for line in f:
+            line_str = line.strip()
+            if not line_str:
+                continue
             try:
-                item = json.loads(line)
+                item = json.loads(line_str)
                 step_idx = item.get("step_index", 0)
                 t = item.get("type")
                 content = item.get("content") or ""
@@ -41,10 +54,15 @@ def find_prune_step(source_id, turn_index=None, snippet=None):
                 if t == "USER_INPUT":
                     if current_turn:
                         turns.append(current_turn)
+                    clean_content = content.replace("<USER_REQUEST>", "").replace("</USER_REQUEST>", "")
+                    if "<ADDITIONAL_METADATA>" in clean_content:
+                        clean_content = clean_content.split("<ADDITIONAL_METADATA>")[0]
+                    clean_content = clean_content.strip()
+
                     current_turn = {
                         "user_step": step_idx,
                         "last_step": step_idx,
-                        "user_content": content,
+                        "user_content": clean_content,
                         "assistant_content": ""
                     }
                 elif current_turn:
@@ -61,10 +79,15 @@ def find_prune_step(source_id, turn_index=None, snippet=None):
         return None
 
     # 1. 优先按消息内容片段精确匹配
-    if snippet and len(snippet.strip()) >= 5:
-        clean = snippet.strip()[:40]
+    if snippet and len(snippet.strip()) >= 4:
+        clean = " ".join(snippet.strip().split())[:50]
         for t in turns:
-            if clean in t["user_content"] or clean in t["assistant_content"]:
+            u_clean = " ".join(t["user_content"].split())
+            a_clean = " ".join(t["assistant_content"].split())
+            if clean in u_clean or clean in a_clean:
+                return t["last_step"]
+            short = clean[:20]
+            if len(short) >= 4 and (short in u_clean or short in a_clean):
                 return t["last_step"]
 
     # 2. 其次按轮次索引匹配
@@ -104,26 +127,35 @@ def branch_conversation(source_id=None, branch_title=None, up_to_step=None, turn
         branch_title = f"{source_title} (分支)"
 
     new_id = str(uuid.uuid4())
+    new_trajectory_id = str(uuid.uuid4())
 
     # 4. 复制 conversations/<source_id>.db 数据库 (使用官方 backup API 确保 WAL 模式安全原子复制)
     src_db = gemini_dir / "conversations" / f"{source_id}.db"
     dst_db = gemini_dir / "conversations" / f"{new_id}.db"
+    source_trajectory_id = None
     if src_db.exists():
         conn_src = sqlite3.connect(src_db)
         conn_dst = sqlite3.connect(dst_db)
         conn_src.backup(conn_dst)
         conn_src.close()
         
-        # 更新新库的内部 cascade_id 与修剪 steps
+        # 读取旧 trajectory_id 并更新新库的内部 cascade_id 与 trajectory_id
         try:
-            conn_dst.execute("UPDATE trajectory_meta SET cascade_id = ?", (new_id,))
+            row_meta = conn_dst.execute("SELECT trajectory_id FROM trajectory_meta LIMIT 1").fetchone()
+            if row_meta:
+                source_trajectory_id = row_meta[0]
+            conn_dst.execute("UPDATE trajectory_meta SET cascade_id = ?, trajectory_id = ?", (new_id, new_trajectory_id))
         except Exception:
             pass
 
         actual_steps = None
         if up_to_step is not None:
+            for tbl in ["steps", "gen_metadata", "executor_metadata", "parent_references", "battle_mode_infos"]:
+                try:
+                    conn_dst.execute(f"DELETE FROM {tbl} WHERE idx > ?", (up_to_step,))
+                except Exception:
+                    pass
             try:
-                conn_dst.execute("DELETE FROM steps WHERE idx > ?", (up_to_step,))
                 actual_steps = conn_dst.execute("SELECT count(*) FROM steps").fetchone()[0]
             except Exception:
                 pass
@@ -143,7 +175,14 @@ def branch_conversation(source_id=None, branch_title=None, up_to_step=None, turn
     dst_brain = gemini_dir / "brain" / new_id
     if src_brain.exists():
         shutil.copytree(src_brain, dst_brain, dirs_exist_ok=True)
-        # 如果指定了修剪步数，修剪 transcript.jsonl
+        
+        # 核心关键修复 1: 彻底删除新会话中的 chunks 缓存！
+        # Antigravity 优先从 chunks/ 目录加载分块消息，若不删除会导致旧的后续消息被再次显示！
+        chunks_dir = dst_brain / ".system_generated" / "logs" / "chunks"
+        if chunks_dir.exists():
+            shutil.rmtree(chunks_dir, ignore_errors=True)
+
+        # 如果指定了修剪步数，修剪 transcript.jsonl 与 transcript_full.jsonl
         if up_to_step is not None:
             for log_name in ["transcript.jsonl", "transcript_full.jsonl"]:
                 log_path = dst_brain / ".system_generated" / "logs" / log_name
@@ -160,11 +199,30 @@ def branch_conversation(source_id=None, branch_title=None, up_to_step=None, turn
                     with open(log_path, "w", encoding="utf-8") as f:
                         f.writelines(lines)
 
+            # 核心关键修复 2: 清理 .system_generated/steps 目录下超过 up_to_step 的 step 文件夹
+            steps_dir = dst_brain / ".system_generated" / "steps"
+            if steps_dir.exists():
+                for step_item in steps_dir.iterdir():
+                    try:
+                        if int(step_item.name) > up_to_step:
+                            if step_item.is_dir():
+                                shutil.rmtree(step_item, ignore_errors=True)
+                            else:
+                                step_item.unlink(missing_ok=True)
+                    except ValueError:
+                        pass
+
     # 6. 插入 conversation_summaries.db 新行
     now_str = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S.0000000+00:00")
     row_dict["conversation_id"] = new_id
     row_dict["title"] = branch_title
-    row_dict["parent_conversation_id"] = source_id
+    row_dict["preview"] = branch_title
+    # 【核心关键修复】：parent_conversation_id 必须为空字符串！
+    # Antigravity 后端会话列表过滤规则严格要求 parent_conversation_id = ''，非空则被归类为内部 Subagent 并从侧边栏彻底隐藏！
+    row_dict["parent_conversation_id"] = ""
+    row_dict["status"] = "CASCADE_RUN_STATUS_IDLE"
+    row_dict["not_fully_idle"] = 0
+    row_dict["killed"] = 0
     row_dict["last_modified_time"] = now_str
     row_dict["last_user_input_time"] = now_str
     if actual_steps is not None:
@@ -172,7 +230,11 @@ def branch_conversation(source_id=None, branch_title=None, up_to_step=None, turn
 
     if row_dict.get("raw_summary"):
         try:
-            row_dict["raw_summary"] = bytes(row_dict["raw_summary"]).replace(source_id.encode(), new_id.encode())
+            raw_b = bytes(row_dict["raw_summary"])
+            raw_b = raw_b.replace(source_id.encode(), new_id.encode())
+            if source_trajectory_id:
+                raw_b = raw_b.replace(source_trajectory_id.encode(), new_trajectory_id.encode())
+            row_dict["raw_summary"] = raw_b
         except Exception:
             pass
 
@@ -182,27 +244,18 @@ def branch_conversation(source_id=None, branch_title=None, up_to_step=None, turn
     conn_sum.commit()
     conn_sum.close()
 
-    # 7. 更新 app_storage.json 置顶与布局
+    # 7. 更新 app_storage.json 布局配置
     storage_path = get_app_storage_path()
     if storage_path.exists():
         try:
             with open(storage_path, "r", encoding="utf-8") as f:
                 storage_data = json.load(f)
             
-            # 添加布局
+            # 添加布局 (确保多会话窗格系统正确渲染新分支)
             storage_data[f"antigravity-multi-conversation-layout-v3-{new_id}"] = json.dumps({
                 "rootNode": {"type": "pane", "id": "pane-1", "cascadeId": new_id},
                 "focusedPaneId": "pane-1"
             })
-
-            # 插入到置顶会话列表头部
-            try:
-                pinned = json.loads(storage_data.get("pinned_conversations_order", "[]"))
-                if new_id not in pinned:
-                    pinned.insert(0, new_id)
-                storage_data["pinned_conversations_order"] = json.dumps(pinned)
-            except Exception:
-                pass
 
             with open(storage_path, "w", encoding="utf-8") as f:
                 json.dump(storage_data, f, indent=2, ensure_ascii=False)
@@ -219,11 +272,42 @@ def branch_conversation(source_id=None, branch_title=None, up_to_step=None, turn
     }
 
 if __name__ == "__main__":
-    src = sys.argv[1] if len(sys.argv) > 1 and sys.argv[1] else None
-    title = sys.argv[2] if len(sys.argv) > 2 and sys.argv[2] else None
-    step = int(sys.argv[3]) if len(sys.argv) > 3 and sys.argv[3].isdigit() else None
-    t_idx = int(sys.argv[4]) if len(sys.argv) > 4 and sys.argv[4].isdigit() else None
-    snip = sys.argv[5] if len(sys.argv) > 5 and sys.argv[5] else None
+    src = None
+    title = None
+    step = None
+    t_idx = None
+    snip = None
+
+    # 优先从 stdin 读取 JSON 数据 (彻底解决 Windows 命令行 ANSI/CP936 传参中文乱码问题)
+    if not sys.stdin.isatty():
+        try:
+            stdin_data = sys.stdin.read().strip()
+            if stdin_data:
+                params = json.loads(stdin_data)
+                src = params.get("sourceId") or None
+                title = params.get("title") or None
+                step = params.get("upToStep")
+                if step is not None:
+                    step = int(step)
+                t_idx = params.get("turnIndex")
+                if t_idx is not None:
+                    t_idx = int(t_idx)
+                snip = params.get("snippet") or None
+        except Exception:
+            pass
+
+    # 兜底支持 argv 传入
+    if not src and len(sys.argv) > 1 and sys.argv[1]:
+        src = sys.argv[1]
+    if not title and len(sys.argv) > 2 and sys.argv[2]:
+        title = sys.argv[2]
+    if step is None and len(sys.argv) > 3 and sys.argv[3].isdigit():
+        step = int(sys.argv[3])
+    if t_idx is None and len(sys.argv) > 4 and sys.argv[4].isdigit():
+        t_idx = int(sys.argv[4])
+    if not snip and len(sys.argv) > 5 and sys.argv[5]:
+        snip = sys.argv[5]
+
     try:
         res = branch_conversation(src, title, step, t_idx, snip)
         print(json.dumps(res, ensure_ascii=False, indent=2))

@@ -4,19 +4,19 @@
   "officialVersion": "2.19.1",
   "officialSha256": "341234faf45bd1776fd5418a3c288dedc5487ebfcf153f53d75de17cfe15c1de",
   "outputAsar": "D:\\github\\Antigravity-Chinese\\assets\\app.asar",
-  "outputSize": 5208181,
-  "outputSha256": "cfee08822e7aecf67cea4a6f6cce025248b9df82395f35b5eac8e1549fd406ce",
+  "outputSize": 5222134,
+  "outputSha256": "0373e7ca976365cc082720c44c843b13ea1b4b4ccd080a164e951b0ff6a6a8fa",
   "compatibility": {
     "files": [
       {
         "file": "dist/preload.js",
         "officialBytes": 5337,
-        "rebuiltBytes": 460857
+        "rebuiltBytes": 470827
       },
       {
         "file": "dist/main.js",
         "officialBytes": 20023,
-        "rebuiltBytes": 33294
+        "rebuiltBytes": 37277
       },
       {
         "file": "dist/tray.js",
@@ -89,6 +89,18 @@
         "index": 9,
         "file": "dist/preload.js",
         "description": "Inject in-UI branch conversation buttons, modal, shortcut, and full-featured pet with micro-interactions (edge peek, afk sleep, launch push, scramble pudding drag)",
+        "hits": 1
+      },
+      {
+        "index": 10,
+        "file": "dist/preload.js",
+        "description": "Inject high-frequency missing UI dictionary translations into dist/preload.js",
+        "hits": 1
+      },
+      {
+        "index": 11,
+        "file": "dist/preload.js",
+        "description": "Enhance dynamic status regex rules for searches, active goals, and task statuses in dist/preload.js",
         "hits": 1
       },
       {

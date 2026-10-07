@@ -86,31 +86,122 @@ function buildPreload(official, legacy) {
 function buildMain(official, legacy) {
   const rawHeader = extractBetween(legacy, 'const agyThemePath = require("path");', 'const gotTheLock = electron_1.app.requestSingleInstanceLock();', 'main AGY header');
   const branchIpcHandler = `
+electron_1.ipcMain.handle('agy:get-conversation-turns', async (event, args = {}) => {
+    const fs = require('fs');
+    const path = require('path');
+    const os = require('os');
+    try {
+        let sourceId = (args && args.sourceId) || '';
+        const geminiDir = path.join(os.homedir(), '.gemini', 'antigravity');
+        if (!sourceId) {
+            const brainDir = path.join(geminiDir, 'brain');
+            if (fs.existsSync(brainDir)) {
+                const dirs = fs.readdirSync(brainDir);
+                let latestTime = 0;
+                for (const dir of dirs) {
+                    const transcript = path.join(brainDir, dir, '.system_generated', 'logs', 'transcript.jsonl');
+                    if (fs.existsSync(transcript)) {
+                        const stat = fs.statSync(transcript);
+                        if (stat.mtimeMs > latestTime) {
+                            latestTime = stat.mtimeMs;
+                            sourceId = dir;
+                        }
+                    }
+                }
+            }
+        }
+        if (!sourceId) {
+            return { success: false, error: '未找到活跃的会话 ID', turns: [] };
+        }
+        const logPath = path.join(geminiDir, 'brain', sourceId, '.system_generated', 'logs', 'transcript.jsonl');
+        if (!fs.existsSync(logPath)) {
+            return { success: true, sourceId, turns: [] };
+        }
+        const turns = [];
+        let currentTurn = null;
+        const content = fs.readFileSync(logPath, 'utf8');
+        const lines = content.split('\\n');
+        for (const line of lines) {
+            if (!line.trim()) continue;
+            try {
+                const item = JSON.parse(line);
+                const stepIdx = item.step_index ?? 0;
+                const t = item.type;
+                const itemContent = item.content || '';
+                const createdAt = item.created_at || '';
+                if (t === 'USER_INPUT') {
+                    if (currentTurn) turns.push(currentTurn);
+                    let clean = itemContent.replace(/<USER_REQUEST>/g, '').replace(/<\\/USER_REQUEST>/g, '');
+                    if (clean.includes('<ADDITIONAL_METADATA>')) {
+                        clean = clean.split('<ADDITIONAL_METADATA>')[0];
+                    }
+                    clean = clean.trim();
+                    currentTurn = {
+                        turnIndex: turns.length,
+                        userStep: stepIdx,
+                        lastStep: stepIdx,
+                        userText: clean.slice(0, 100),
+                        assistantSnippet: '',
+                        createdAt: createdAt
+                    };
+                } else if (currentTurn) {
+                    if (stepIdx > currentTurn.lastStep) {
+                        currentTurn.lastStep = stepIdx;
+                    }
+                    if (t === 'PLANNER_RESPONSE' && itemContent && !currentTurn.assistantSnippet) {
+                        let aClean = itemContent.replace(/\\s+/g, ' ').trim();
+                        currentTurn.assistantSnippet = aClean.slice(0, 120);
+                    }
+                }
+            } catch (_) {}
+        }
+        if (currentTurn) turns.push(currentTurn);
+        return { success: true, sourceId, turns };
+    } catch (err) {
+        return { success: false, error: err.message, turns: [] };
+    }
+});
+
 electron_1.ipcMain.handle('agy:branch-conversation', async (event, args = {}) => {
     const fs = require('fs');
     const path = require('path');
     const os = require('os');
     const childProcess = require('child_process');
-    const pythonScript = path.join(process.env.APPDATA || '', 'Antigravity', 'scripts', 'branch_conversation.py');
+    const appDataScript = path.join(process.env.APPDATA || '', 'Antigravity', 'scripts', 'branch_conversation.py');
+    const bundledScript = path.join(__dirname, 'scripts', 'branch_conversation.py');
+    const pythonScript = fs.existsSync(appDataScript) ? appDataScript : bundledScript;
     const anacondaPython = path.join(os.homedir(), 'anaconda3', 'python.exe');
     const pythonExe = fs.existsSync(anacondaPython) ? anacondaPython : 'python';
     return new Promise((resolve) => {
-        const cliArgs = [
-            pythonScript,
-            String(args.sourceId || ''),
-            String(args.title || ''),
-            String(args.upToStep !== undefined && args.upToStep !== null ? args.upToStep : ''),
-            String(args.turnIndex !== undefined && args.turnIndex !== null ? args.turnIndex : ''),
-            String(args.snippet || '')
-        ];
-        childProcess.execFile(pythonExe, cliArgs, { encoding: 'utf8' }, (err, stdout, stderr) => {
-            if (err) return resolve({ success: false, error: stderr || err.message });
+        const child = childProcess.spawn(pythonExe, [pythonScript], {
+            env: { ...process.env, PYTHONIOENCODING: 'utf-8' },
+            stdio: ['pipe', 'pipe', 'pipe']
+        });
+        let stdout = '';
+        let stderr = '';
+        child.stdout.setEncoding('utf8');
+        child.stderr.setEncoding('utf8');
+        child.stdout.on('data', data => { stdout += data; });
+        child.stderr.on('data', data => { stderr += data; });
+        child.on('error', err => {
+            resolve({ success: false, error: err.message });
+        });
+        child.on('close', code => {
+            if (code !== 0 && !stdout.trim()) {
+                return resolve({ success: false, error: stderr || ('Process exited with code ' + code) });
+            }
             try {
                 resolve(JSON.parse(stdout));
             } catch (e) {
-                resolve({ success: false, error: stdout || e.message });
+                resolve({ success: false, error: stdout || stderr || e.message });
             }
         });
+        try {
+            child.stdin.write(JSON.stringify(args || {}));
+            child.stdin.end();
+        } catch (err) {
+            resolve({ success: false, error: 'Failed to write to stdin: ' + err.message });
+        }
     });
 });
 `;

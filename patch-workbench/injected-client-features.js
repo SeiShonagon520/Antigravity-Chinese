@@ -114,7 +114,7 @@ function injectMessageBranchButtons() {
 function getMessageTurnInfo(bar) {
     let cur = bar.parentElement;
     let turnContainer = cur;
-    for (let i = 0; i < 5 && cur && cur !== document.body; i++) {
+    for (let i = 0; i < 6 && cur && cur !== document.body; i++) {
         const cls = String(cur.className || '').toLowerCase();
         if (
             cls.includes('message') || 
@@ -132,15 +132,18 @@ function getMessageTurnInfo(bar) {
     }
 
     let text = (turnContainer.innerText || turnContainer.textContent || '').trim();
-    text = text.replace(/(Copy|复制|分支|Branch|🌿|重试|Retry|赞|踩)/g, '').trim();
+    text = text.replace(/(Copy|复制|分支|Branch|🌿|重试|Retry|赞|踩)/g, ' ').replace(/\s+/g, ' ').trim();
     const snippet = text.slice(0, 100);
 
-    let turnIndex = 0;
+    let turnIndex = null;
     if (turnContainer && turnContainer.parentElement) {
         const siblings = Array.from(turnContainer.parentElement.children).filter(el => {
             return el.querySelector('.agy-msg-branch-btn') || el === turnContainer;
         });
-        turnIndex = siblings.indexOf(turnContainer);
+        const idx = siblings.indexOf(turnContainer);
+        if (idx >= 0) {
+            turnIndex = idx;
+        }
     }
 
     return { snippet, turnIndex };
@@ -150,13 +153,20 @@ function openBranchModal(options = {}) {
     if (document.getElementById('agy-branch-modal')) return;
 
     let currentTitle = '当前对话';
-    const titleEl = document.querySelector('header h1, header h2, [class*="header"] h1, [class*="header"] h2, [class*="title-bar"] h1, [class*="title-bar"] h2, header div, main h1, main h2');
-    if (titleEl && titleEl.textContent) {
-        const txt = titleEl.textContent.trim();
-        if (txt && txt.length < 80 && !txt.includes('Open IDE')) currentTitle = txt;
+    const activeItem = document.querySelector('[data-agy-active="true"], [data-agy-nav-item="true"], [aria-current="page"]');
+    if (activeItem && activeItem.textContent) {
+        const itemTxt = activeItem.textContent.trim().replace(/^(🌿\s*)/, '');
+        if (itemTxt && itemTxt.length < 80) currentTitle = itemTxt;
+    }
+    if (currentTitle === '当前对话') {
+        const titleEl = document.querySelector('header h1, header h2, [class*="header"] h1, [class*="header"] h2, [class*="title-bar"] h1, [class*="title-bar"] h2, main h1, main h2');
+        if (titleEl && titleEl.textContent) {
+            const txt = titleEl.textContent.trim();
+            if (txt && txt.length < 80 && !txt.includes('Open IDE') && !txt.includes('打开 IDE')) currentTitle = txt;
+        }
     }
 
-    const currentId = options.sourceId || getCurrentConversationId();
+    let currentId = options.sourceId || getCurrentConversationId();
     const snippet = options.snippet || '';
     const turnIndex = options.turnIndex !== undefined && options.turnIndex !== null ? options.turnIndex : null;
 
@@ -167,32 +177,40 @@ function openBranchModal(options = {}) {
 
     const modal = document.createElement('div');
     modal.id = 'agy-branch-modal';
-    modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.55);backdrop-filter:blur(6px);display:flex;align-items:center;justify-content:center;z-index:2147483647;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;';
+    modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.6);backdrop-filter:blur(6px);display:flex;align-items:center;justify-content:center;z-index:2147483647;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;';
     
-    const previewHtml = snippet ? `
-      <div style="display:flex;flex-direction:column;gap:4px;">
-        <label style="font-size:11px;font-weight:500;color:#94a3b8;">分叉历史截断点：</label>
-        <div style="font-size:11px;color:#cbd5e1;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);padding:7px 10px;border-radius:8px;max-height:54px;overflow:hidden;line-height:1.4;">"${snippet.replace(/"/g, '&quot;')}"</div>
-      </div>
-    ` : '';
-
     modal.innerHTML = `
-      <div style="background:rgba(24,28,36,0.96);color:#f1f5f9;border:1px solid rgba(255,255,255,0.14);border-radius:14px;padding:22px 24px;width:400px;box-shadow:0 20px 50px rgba(0,0,0,0.5);display:flex;flex-direction:column;gap:14px;">
+      <div style="background:rgba(24,28,36,0.97);color:#f1f5f9;border:1px solid rgba(255,255,255,0.14);border-radius:14px;padding:22px 24px;width:450px;box-shadow:0 20px 50px rgba(0,0,0,0.55);display:flex;flex-direction:column;gap:14px;">
         <div style="display:flex;align-items:center;gap:10px;">
-          <div style="width:34px;height:34px;border-radius:8px;background:rgba(34,197,94,0.15);color:#4ade80;display:flex;align-items:center;justify-content:center;font-size:16px;">🌿</div>
+          <div style="width:36px;height:36px;border-radius:10px;background:rgba(34,197,94,0.15);color:#4ade80;display:flex;align-items:center;justify-content:center;font-size:18px;">🌿</div>
           <div>
-            <h3 style="margin:0;font-size:15px;font-weight:600;color:#f8fafc;">新建对话分支</h3>
-            <p style="margin:2px 0 0 0;font-size:11px;color:#94a3b8;">${snippet ? '从此条消息分叉，开启独立探索分支' : '克隆当前上下文并创建平行独立的新会话'}</p>
+            <h3 style="margin:0;font-size:15px;font-weight:600;color:#f8fafc;">新建会话分支 (分叉修剪历史)</h3>
+            <p style="margin:2px 0 0 0;font-size:11px;color:#94a3b8;">可自由指定保留的历史对话轮次，彻底丢弃后续对话</p>
           </div>
         </div>
-        ${previewHtml}
-        <div style="display:flex;flex-direction:column;gap:6px;margin-top:2px;">
-          <label style="font-size:12px;font-weight:500;color:#cbd5e1;">分支会话标题：</label>
-          <input id="agy-branch-title-input" type="text" value="${defaultBranchTitle.replace(/"/g, '&quot;')}" style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.18);border-radius:8px;padding:9px 12px;color:#fff;font-size:13px;outline:none;" />
+
+        <div style="display:flex;flex-direction:column;gap:6px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <label style="font-size:12px;font-weight:500;color:#cbd5e1;">分叉截断点 (保留历史轮次)：</label>
+            <span id="agy-branch-turn-badge" style="font-size:11px;color:#94a3b8;">正在分析历史...</span>
+          </div>
+          <select id="agy-branch-turn-select" style="background:rgba(30,36,48,0.95);border:1px solid rgba(255,255,255,0.18);border-radius:8px;padding:9px 12px;color:#fff;font-size:12px;outline:none;cursor:pointer;width:100%;box-sizing:border-box;">
+            <option value="-1">⏳ 正在读取会话历史轮次...</option>
+          </select>
         </div>
-        <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:6px;">
+
+        <div id="agy-branch-turn-hint" style="font-size:11px;color:#cbd5e1;line-height:1.5;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:9px 12px;min-height:36px;display:flex;align-items:center;">
+          ⏳ 正在载入会话历史...
+        </div>
+
+        <div style="display:flex;flex-direction:column;gap:6px;">
+          <label style="font-size:12px;font-weight:500;color:#cbd5e1;">分支会话标题：</label>
+          <input id="agy-branch-title-input" type="text" value="${defaultBranchTitle.replace(/"/g, '&quot;')}" style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.18);border-radius:8px;padding:9px 12px;color:#fff;font-size:13px;outline:none;width:100%;box-sizing:border-box;" />
+        </div>
+
+        <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:4px;">
           <button id="agy-branch-cancel" type="button" style="padding:7px 15px;border:1px solid rgba(255,255,255,0.15);border-radius:8px;background:transparent;color:#94a3b8;cursor:pointer;font-size:12px;">取消</button>
-          <button id="agy-branch-submit" type="button" style="padding:7px 18px;border:none;border-radius:8px;background:#10b981;color:#fff;font-weight:600;cursor:pointer;font-size:12px;box-shadow:0 4px 12px rgba(16,185,129,0.3);">确认创建</button>
+          <button id="agy-branch-submit" type="button" style="padding:7px 18px;border:none;border-radius:8px;background:#10b981;color:#fff;font-weight:600;cursor:pointer;font-size:12px;box-shadow:0 4px 12px rgba(16,185,129,0.3);">确认创建分支</button>
         </div>
       </div>
     `;
@@ -200,8 +218,109 @@ function openBranchModal(options = {}) {
     document.body.appendChild(modal);
 
     const input = document.getElementById('agy-branch-title-input');
+    const select = document.getElementById('agy-branch-turn-select');
+    const hint = document.getElementById('agy-branch-turn-hint');
+    const badge = document.getElementById('agy-branch-turn-badge');
     const btnCancel = document.getElementById('agy-branch-cancel');
     const btnSubmit = document.getElementById('agy-branch-submit');
+
+    let userEditedTitle = false;
+    input.addEventListener('input', () => { userEditedTitle = true; });
+
+    let conversationTurns = [];
+
+    // 异步加载会话轮次数据
+    (async () => {
+        try {
+            const turnRes = await electron_1.ipcRenderer.invoke('agy:get-conversation-turns', { sourceId: currentId });
+            if (turnRes && turnRes.success && Array.isArray(turnRes.turns)) {
+                conversationTurns = turnRes.turns;
+                if (!currentId && turnRes.sourceId) {
+                    currentId = turnRes.sourceId;
+                }
+            }
+        } catch (e) {
+            console.warn('[AGY] Failed to fetch turns:', e);
+        }
+
+        select.innerHTML = '';
+        if (conversationTurns.length === 0) {
+            const opt = document.createElement('option');
+            opt.value = '-1';
+            opt.textContent = '🌟 完整克隆当前会话 (全量保留)';
+            select.appendChild(opt);
+            badge.textContent = '暂无历史轮次';
+            hint.innerHTML = '🌟 将完整克隆当前会话的全部上下文。';
+        } else {
+            badge.textContent = '共 ' + conversationTurns.length + ' 轮对话';
+
+            // 倒序排列 (最新的轮次在上方，便于选择)
+            conversationTurns.slice().reverse().forEach(t => {
+                const opt = document.createElement('option');
+                opt.value = String(t.turnIndex);
+                const num = t.turnIndex + 1;
+                const snippetText = t.userText ? (t.userText.length > 26 ? t.userText.slice(0, 26) + '...' : t.userText) : ('第 ' + num + ' 轮');
+                opt.textContent = '🌿 第 ' + num + ' 轮: ' + snippetText + ' (保留第 1~' + num + ' 轮)';
+                select.appendChild(opt);
+            });
+
+            // 底部选项: 全量克隆
+            const fullOpt = document.createElement('option');
+            fullOpt.value = '-1';
+            fullOpt.textContent = '🌟 完整克隆当前会话 (全量保留所有 ' + conversationTurns.length + ' 轮)';
+            select.appendChild(fullOpt);
+
+            // 匹配预选轮次
+            let targetTurnIndex = -1;
+            if (snippet && snippet.length >= 4) {
+                const sNorm = snippet.toLowerCase().replace(/\s+/g, ' ');
+                const matched = conversationTurns.find(t => {
+                    const uNorm = (t.userText || '').toLowerCase().replace(/\s+/g, ' ');
+                    const aNorm = (t.assistantSnippet || '').toLowerCase().replace(/\s+/g, ' ');
+                    return (uNorm && (uNorm.includes(sNorm.slice(0, 18)) || sNorm.includes(uNorm.slice(0, 18)))) ||
+                           (aNorm && (aNorm.includes(sNorm.slice(0, 18)) || sNorm.includes(aNorm.slice(0, 18))));
+                });
+                if (matched) {
+                    targetTurnIndex = matched.turnIndex;
+                }
+            }
+
+            if (targetTurnIndex === -1 && turnIndex !== null && turnIndex >= 0 && turnIndex < conversationTurns.length) {
+                targetTurnIndex = turnIndex;
+            }
+
+            if (targetTurnIndex >= 0) {
+                select.value = String(targetTurnIndex);
+            } else {
+                // 如果是从消息按钮点开但未精确匹配，默认选最后一轮；如果是顶部按钮点开，选全量克隆 (-1)
+                select.value = (snippet || turnIndex !== null) && conversationTurns.length > 0 
+                    ? String(conversationTurns[conversationTurns.length - 1].turnIndex) 
+                    : '-1';
+            }
+        }
+
+        function updateSelectionView() {
+            const val = parseInt(select.value, 10);
+            if (val === -1 || isNaN(val) || conversationTurns.length === 0) {
+                hint.innerHTML = '🌟 <span style="color:#38bdf8;font-weight:600;">全量保留</span>：完整保留当前会话的所有 ' + conversationTurns.length + ' 轮历史对话与执行状态，作为全新独立起点。';
+                if (!userEditedTitle) {
+                    input.value = `${currentTitle} (完整分支)`;
+                }
+            } else {
+                const preserved = val + 1;
+                const pruned = conversationTurns.length - preserved;
+                const chosen = conversationTurns.find(t => t.turnIndex === val);
+                const userQuery = chosen && chosen.userText ? `"${chosen.userText.slice(0, 30)}..."` : `第 ${preserved} 轮`;
+                hint.innerHTML = '<span style="color:#4ade80;font-weight:600;">✂️ 精准修剪分叉</span>：仅保留第 <strong>1 ~ ' + preserved + '</strong> 轮历史 (' + userQuery + ')。后续的 <strong>' + pruned + '</strong> 轮对话将被彻底丢弃！';
+                if (!userEditedTitle) {
+                    input.value = `${currentTitle} (第 ${preserved} 轮分支)`;
+                }
+            }
+        }
+
+        select.addEventListener('change', updateSelectionView);
+        updateSelectionView();
+    })();
 
     input.focus();
     input.select();
@@ -211,26 +330,52 @@ function openBranchModal(options = {}) {
     modal.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
 
     btnSubmit.addEventListener('click', async () => {
+      const val = parseInt(select.value, 10);
+      let upToStep = null;
+      let chosenTurnIndex = null;
+      if (val >= 0 && conversationTurns.length > 0) {
+          const chosen = conversationTurns.find(t => t.turnIndex === val);
+          if (chosen) {
+              upToStep = chosen.lastStep;
+              chosenTurnIndex = chosen.turnIndex;
+          }
+      }
+
       const branchTitle = input.value.trim() || defaultBranchTitle;
       btnSubmit.disabled = true;
-      btnSubmit.textContent = '正在克隆...';
+      btnSubmit.textContent = '正在修剪并创建分支...';
       btnSubmit.style.opacity = '0.7';
 
       try {
         const res = await electron_1.ipcRenderer.invoke('agy:branch-conversation', {
           sourceId: currentId,
           title: branchTitle,
-          turnIndex: turnIndex,
+          upToStep: upToStep,
+          turnIndex: chosenTurnIndex,
           snippet: snippet
         });
-        closeModal();
-        if (res && res.success) {
-          showBranchToast('🌿 分支「' + branchTitle + '」创建成功！已自动置顶在左侧会话列表中');
+        if (res && res.success && res.branchId) {
+          btnSubmit.textContent = '正在载入新分支...';
+          showBranchToast('🌿 分支「' + branchTitle + '」创建成功！正在载入新分支...');
+          setTimeout(() => {
+            closeModal();
+            // 自动无缝切换到新分支会话
+            if (location.hash && location.hash.startsWith('#/c/')) {
+              window.location.hash = '#/c/' + res.branchId;
+            } else {
+              window.location.href = '/c/' + res.branchId;
+            }
+          }, 350);
         } else {
+          btnSubmit.disabled = false;
+          btnSubmit.textContent = '确认创建分支';
+          btnSubmit.style.opacity = '1';
           alert('创建分支失败: ' + (res && res.error ? res.error : '未知错误'));
         }
       } catch (err) {
-        closeModal();
+        btnSubmit.disabled = false;
+        btnSubmit.textContent = '确认创建分支';
+        btnSubmit.style.opacity = '1';
         alert('调用分支接口出错: ' + err.message);
       }
     });
@@ -943,6 +1088,14 @@ setInterval(() => {
     if (!pet || !composer) return;
 
     const maxOffset = Math.max(60, composer.clientWidth - 52);
+    if (agyPetOffset > maxOffset) {
+        agyPetOffset = maxOffset;
+        pet.style.right = agyPetOffset + 'px';
+    }
+    if (agyPetOffset < 24) {
+        agyPetOffset = 24;
+        pet.style.right = agyPetOffset + 'px';
+    }
 
     const isHitLeftEdge = (agyPetOffset >= maxOffset && agyPatrolDir === 1);
     const isHitRightEdge = (agyPetOffset <= 24 && agyPatrolDir === -1);
