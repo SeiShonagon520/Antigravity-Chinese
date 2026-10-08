@@ -1,6 +1,6 @@
 {
   "formatVersion": 2,
-  "clientVersion": "2.19.1",
+  "clientVersion": "2.21.1",
   "supportedClientRange": ">=2.4.3 <3.0.0",
   "patchVersion": "1.3.0",
   "pluginVersion": "1.3.0",
@@ -18,7 +18,7 @@
   "optionalCapabilities": [
     "dist/accountVault.js"
   ],
-  "officialSha256": "341234faf45bd1776fd5418a3c288dedc5487ebfcf153f53d75de17cfe15c1de",
-  "patchSha256": "0373e7ca976365cc082720c44c843b13ea1b4b4ccd080a164e951b0ff6a6a8fa",
-  "builtAt": "2026-10-07T08:22:11.423Z"
+  "officialSha256": "d075e5d9ff01f8806016aa88c39bf1429f068a941fdbe46147d8409843e62113",
+  "patchSha256": "f043f0c8920e4cb39649b50326252f2f2b6313c39718dc6f8a3d03827874bbd8",
+  "builtAt": "2026-10-08T06:41:29.673Z"
 }

@@ -1,17 +1,17 @@
 {
   "ok": true,
   "officialAsar": "C:\\Users\\L\\AppData\\Local\\Programs\\Antigravity\\resources\\app.asar.original",
-  "officialVersion": "2.19.1",
-  "officialSha256": "341234faf45bd1776fd5418a3c288dedc5487ebfcf153f53d75de17cfe15c1de",
+  "officialVersion": "2.21.1",
+  "officialSha256": "d075e5d9ff01f8806016aa88c39bf1429f068a941fdbe46147d8409843e62113",
   "outputAsar": "D:\\github\\Antigravity-Chinese\\assets\\app.asar",
-  "outputSize": 5222134,
-  "outputSha256": "0373e7ca976365cc082720c44c843b13ea1b4b4ccd080a164e951b0ff6a6a8fa",
+  "outputSize": 5222206,
+  "outputSha256": "f043f0c8920e4cb39649b50326252f2f2b6313c39718dc6f8a3d03827874bbd8",
   "compatibility": {
     "files": [
       {
         "file": "dist/preload.js",
-        "officialBytes": 5337,
-        "rebuiltBytes": 470827
+        "officialBytes": 5409,
+        "rebuiltBytes": 470899
       },
       {
         "file": "dist/main.js",
