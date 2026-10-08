@@ -4,14 +4,14 @@
   "officialVersion": "2.21.1",
   "officialSha256": "d075e5d9ff01f8806016aa88c39bf1429f068a941fdbe46147d8409843e62113",
   "outputAsar": "D:\\github\\Antigravity-Chinese\\assets\\app.asar",
-  "outputSize": 5222206,
-  "outputSha256": "f043f0c8920e4cb39649b50326252f2f2b6313c39718dc6f8a3d03827874bbd8",
+  "outputSize": 5230815,
+  "outputSha256": "108d14390a170f0c060c3464eac890a614e38a471ee59c59c65377914adb8d42",
   "compatibility": {
     "files": [
       {
         "file": "dist/preload.js",
         "officialBytes": 5409,
-        "rebuiltBytes": 470899
+        "rebuiltBytes": 479508
       },
       {
         "file": "dist/main.js",
@@ -94,13 +94,25 @@
       {
         "index": 10,
         "file": "dist/preload.js",
-        "description": "Inject high-frequency missing UI dictionary translations into dist/preload.js",
+        "description": "Inject high-frequency missing UI dictionary translations and complete settings options into dist/preload.js",
         "hits": 1
       },
       {
         "index": 11,
         "file": "dist/preload.js",
         "description": "Enhance dynamic status regex rules for searches, active goals, and task statuses in dist/preload.js",
+        "hits": 1
+      },
+      {
+        "index": 12,
+        "file": "dist/preload.js",
+        "description": "Fix shouldSkipNode to prevent skipping settings dropdown options and form controls",
+        "hits": 1
+      },
+      {
+        "index": 13,
+        "file": "dist/preload.js",
+        "description": "Expand translateNode attribute list to include label in dist/preload.js",
         "hits": 1
       },
       {
