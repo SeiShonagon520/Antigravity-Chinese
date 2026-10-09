@@ -26,24 +26,41 @@ function getCurrentConversationId() {
     return '';
 }
 
-/* --- [AGY UI 增强 1] 顶部新建分支按钮 --- */
-function injectBranchButton() {
-    if (document.getElementById('agy-branch-btn')) return;
+function getTitlebarTarget() {
     const openIdeBtn = Array.from(document.querySelectorAll('button')).find(btn => {
         const txt = (btn.textContent || '').trim();
         return txt.includes('Open IDE') || txt.includes('打开 IDE');
     });
-    if (!openIdeBtn || !openIdeBtn.parentElement) return;
+    if (openIdeBtn && openIdeBtn.parentElement) {
+        return { container: openIdeBtn.parentElement, refNode: openIdeBtn, baseClass: openIdeBtn.className };
+    }
+    const moreBtn = document.querySelector('[data-testid="titlebar-more-actions"]') || document.querySelector('button[aria-label="More actions"]');
+    if (moreBtn && moreBtn.parentElement) {
+        return { container: moreBtn.parentElement, refNode: moreBtn, baseClass: moreBtn.className };
+    }
+    return null;
+}
+
+/* --- [AGY UI 增强 1] 顶部新建分支按钮 --- */
+function injectBranchButton() {
+    if (document.getElementById('agy-branch-btn')) return;
+    const target = getTitlebarTarget();
+    if (!target) return;
 
     const branchBtn = document.createElement('button');
     branchBtn.id = 'agy-branch-btn';
     branchBtn.type = 'button';
     branchBtn.title = '从当前对话创建新分支 (快捷键 Ctrl+Shift+B)';
-    branchBtn.className = openIdeBtn.className;
-    branchBtn.style.marginRight = '8px';
+    branchBtn.className = target.baseClass;
+    branchBtn.style.marginRight = '6px';
     branchBtn.style.display = 'inline-flex';
     branchBtn.style.alignItems = 'center';
+    branchBtn.style.justifyContent = 'center';
     branchBtn.style.gap = '5px';
+    branchBtn.style.padding = '0 10px';
+    branchBtn.style.height = '28px';
+    branchBtn.style.width = 'auto';
+    branchBtn.style.fontSize = '12px';
     branchBtn.style.cursor = 'pointer';
     branchBtn.innerHTML = '<span style="font-size: 13px;">🌿</span><span>新建分支</span>';
 
@@ -52,27 +69,29 @@ function injectBranchButton() {
         openBranchModal();
     });
 
-    openIdeBtn.parentElement.insertBefore(branchBtn, openIdeBtn);
+    target.container.insertBefore(branchBtn, target.refNode);
 }
 
 /* --- [AGY UI 增强 1.1] Codex 风格：顶部侧边对话按钮 --- */
 function injectSideChatButton() {
     if (document.getElementById('agy-side-chat-btn')) return;
-    const openIdeBtn = Array.from(document.querySelectorAll('button')).find(btn => {
-        const txt = (btn.textContent || '').trim();
-        return txt.includes('Open IDE') || txt.includes('打开 IDE');
-    });
-    if (!openIdeBtn || !openIdeBtn.parentElement) return;
+    const target = getTitlebarTarget();
+    if (!target) return;
 
     const sideChatBtn = document.createElement('button');
     sideChatBtn.id = 'agy-side-chat-btn';
     sideChatBtn.type = 'button';
     sideChatBtn.title = '开启/关闭侧边对话 (快捷键 Ctrl+Shift+S) - 独立思考空间，不污染主任务';
-    sideChatBtn.className = openIdeBtn.className;
-    sideChatBtn.style.marginRight = '8px';
+    sideChatBtn.className = target.baseClass;
+    sideChatBtn.style.marginRight = '6px';
     sideChatBtn.style.display = 'inline-flex';
     sideChatBtn.style.alignItems = 'center';
+    sideChatBtn.style.justifyContent = 'center';
     sideChatBtn.style.gap = '5px';
+    sideChatBtn.style.padding = '0 10px';
+    sideChatBtn.style.height = '28px';
+    sideChatBtn.style.width = 'auto';
+    sideChatBtn.style.fontSize = '12px';
     sideChatBtn.style.cursor = 'pointer';
     sideChatBtn.style.transition = 'all 0.2s cubic-bezier(0.16, 1, 0.3, 1)';
     sideChatBtn.innerHTML = '<span style="font-size: 13px;">💬</span><span>侧边对话</span>';
@@ -82,7 +101,7 @@ function injectSideChatButton() {
         toggleSideChatPanel();
     });
 
-    openIdeBtn.parentElement.insertBefore(sideChatBtn, openIdeBtn);
+    target.container.insertBefore(sideChatBtn, target.refNode);
 }
 
 
