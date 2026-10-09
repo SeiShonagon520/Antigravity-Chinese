@@ -628,6 +628,92 @@ electron_1.ipcMain.handle('agy:side-chat-query', async (event, args = {}) => {
         return { success: false, error: err.message };
     }
 });
+
+let agySideWindow = null;
+let agyPreTileBounds = null;
+
+electron_1.ipcMain.handle('agy:toggle-side-window', async (event, args = {}) => {
+    try {
+        const { screen } = electron_1;
+        const currentWin = electron_1.BrowserWindow.fromWebContents(event.sender) || electron_1.BrowserWindow.getFocusedWindow() || electron_1.BrowserWindow.getAllWindows()[0];
+        if (!currentWin) {
+            return { success: false, error: '未找到主窗口' };
+        }
+
+        const currentDisplay = screen.getDisplayMatching(currentWin.getBounds());
+        const { x, y, width, height } = currentDisplay.workArea;
+        const halfWidth = Math.floor(width / 2);
+
+        // 如果并排侧边窗口已经开启且尚未销毁
+        if (agySideWindow && !agySideWindow.isDestroyed()) {
+            if (args.action === 'close' || (args.action !== 'open' && agySideWindow.isFocused())) {
+                agySideWindow.close();
+                agySideWindow = null;
+                if (agyPreTileBounds) {
+                    currentWin.setBounds(agyPreTileBounds);
+                    agyPreTileBounds = null;
+                } else {
+                    currentWin.setBounds({ x, y, width, height });
+                }
+                return { success: true, state: 'closed' };
+            } else {
+                if (currentWin.isMaximized()) currentWin.unmaximize();
+                currentWin.setBounds({ x, y, width: halfWidth, height });
+                if (agySideWindow.isMaximized()) agySideWindow.unmaximize();
+                agySideWindow.setBounds({ x: x + halfWidth, y, width: width - halfWidth, height });
+                agySideWindow.show();
+                agySideWindow.focus();
+                return { success: true, state: 'aligned' };
+            }
+        }
+
+        if (!currentWin.isMaximized()) {
+            agyPreTileBounds = currentWin.getBounds();
+        } else {
+            agyPreTileBounds = null;
+            currentWin.unmaximize();
+        }
+
+        currentWin.setBounds({ x, y, width: halfWidth, height });
+
+        let targetUrl = 'https://127.0.0.1:59005/';
+        try {
+            const curUrl = new URL(currentWin.webContents.getURL());
+            targetUrl = curUrl.origin + '/';
+        } catch (_) {}
+
+        const utilsModule = require('./utils');
+        const newWin = utilsModule.createWindow(targetUrl, typeof storageManager !== 'undefined' ? storageManager : undefined);
+        agySideWindow = newWin;
+
+        const applyBounds = () => {
+            if (newWin && !newWin.isDestroyed()) {
+                if (newWin.isMaximized()) newWin.unmaximize();
+                newWin.setBounds({
+                    x: x + halfWidth,
+                    y,
+                    width: width - halfWidth,
+                    height
+                });
+                newWin.show();
+                newWin.focus();
+            }
+        };
+
+        newWin.once('ready-to-show', applyBounds);
+        setTimeout(applyBounds, 250);
+        setTimeout(applyBounds, 800);
+
+        newWin.on('closed', () => {
+            agySideWindow = null;
+        });
+
+        return { success: true, state: 'opened' };
+    } catch (err) {
+        console.error('agy:toggle-side-window error:', err);
+        return { success: false, error: err.message };
+    }
+});
 `;
   const header = `${rawHeader}\n${branchIpcHandler}\n`;
   const autoProxy = extractBetween(

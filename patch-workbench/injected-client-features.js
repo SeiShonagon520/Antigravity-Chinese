@@ -72,7 +72,28 @@ function injectBranchButton() {
     target.container.insertBefore(branchBtn, target.refNode);
 }
 
-/* --- [AGY UI 增强 1.1] Codex 风格：顶部侧边对话按钮 --- */
+/* --- [AGY UI 增强 1.1] 顶部并排新窗口按钮 --- */
+async function toggleSideWindow() {
+    try {
+        if (typeof electron_1 !== 'undefined' && electron_1.ipcRenderer) {
+            const res = await electron_1.ipcRenderer.invoke('agy:toggle-side-window');
+            if (res && res.success) {
+                if (res.state === 'opened') {
+                    showBranchToast('🗗 已在右侧并排开启原生新窗口！');
+                } else if (res.state === 'closed') {
+                    showBranchToast('🗗 已关闭并排窗口，恢复主窗口');
+                } else if (res.state === 'aligned') {
+                    showBranchToast('🗗 左右窗口已重新对齐');
+                }
+            } else {
+                showBranchToast('⚠️ 并排窗口失败: ' + (res ? res.error : '未知错误'));
+            }
+        }
+    } catch (err) {
+        console.error('toggleSideWindow error:', err);
+    }
+}
+
 function injectSideChatButton() {
     if (document.getElementById('agy-side-chat-btn')) return;
     const target = getTitlebarTarget();
@@ -81,7 +102,7 @@ function injectSideChatButton() {
     const sideChatBtn = document.createElement('button');
     sideChatBtn.id = 'agy-side-chat-btn';
     sideChatBtn.type = 'button';
-    sideChatBtn.title = '开启/关闭侧边对话 (快捷键 Ctrl+Shift+S) - 独立思考空间，不污染主任务';
+    sideChatBtn.title = '并排新窗口 (快捷键 Ctrl+Shift+S) - 自动左/右分屏独立原生会话';
     sideChatBtn.className = target.baseClass;
     sideChatBtn.style.marginRight = '6px';
     sideChatBtn.style.display = 'inline-flex';
@@ -94,11 +115,11 @@ function injectSideChatButton() {
     sideChatBtn.style.fontSize = '12px';
     sideChatBtn.style.cursor = 'pointer';
     sideChatBtn.style.transition = 'all 0.2s cubic-bezier(0.16, 1, 0.3, 1)';
-    sideChatBtn.innerHTML = '<span style="font-size: 13px;">💬</span><span>侧边对话</span>';
+    sideChatBtn.innerHTML = '<span style="font-size: 13px;">🗗</span><span>并排新窗口</span>';
 
     sideChatBtn.addEventListener('click', (e) => {
         e.stopPropagation();
-        toggleSideChatPanel();
+        toggleSideWindow();
     });
 
     target.container.insertBefore(sideChatBtn, target.refNode);
@@ -1502,7 +1523,7 @@ window.addEventListener('keydown', (e) => {
         openBranchModal();
     } else if (e.ctrlKey && e.shiftKey && (e.key === 'S' || e.key === 's')) {
         e.preventDefault();
-        toggleSideChatPanel();
+        toggleSideWindow();
     }
 });
 
