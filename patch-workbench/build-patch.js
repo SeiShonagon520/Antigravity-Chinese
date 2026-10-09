@@ -89,6 +89,19 @@ async function main() {
       compatibility: runtimeBuild.compatibility,
       unpackPattern: runtimeBuild.unpackPattern
   };
+  // 同步复制分支脚本到宿主 AppData 与 .gemini 目录，确保运行时必定存在且最新
+  const sourceBranchScript = path.join(root, 'scripts', 'branch_conversation.py');
+  if (fs.existsSync(sourceBranchScript)) {
+    const targetScriptDirs = [
+      path.join(process.env.APPDATA || '', 'Antigravity', 'scripts'),
+      path.join(require('os').homedir(), '.gemini', 'antigravity', 'scripts')
+    ];
+    for (const dir of targetScriptDirs) {
+      fs.mkdirSync(dir, { recursive: true });
+      fs.copyFileSync(sourceBranchScript, path.join(dir, 'branch_conversation.py'));
+    }
+  }
+
   writeJson(reportPath, report);
   console.log(JSON.stringify(report, null, 2));
 }

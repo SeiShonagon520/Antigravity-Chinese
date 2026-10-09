@@ -167,11 +167,30 @@ electron_1.ipcMain.handle('agy:branch-conversation', async (event, args = {}) =>
     const path = require('path');
     const os = require('os');
     const childProcess = require('child_process');
-    const appDataScript = path.join(process.env.APPDATA || '', 'Antigravity', 'scripts', 'branch_conversation.py');
-    const bundledScript = path.join(__dirname, 'scripts', 'branch_conversation.py');
-    const pythonScript = fs.existsSync(appDataScript) ? appDataScript : bundledScript;
-    const anacondaPython = path.join(os.homedir(), 'anaconda3', 'python.exe');
-    const pythonExe = fs.existsSync(anacondaPython) ? anacondaPython : 'python';
+    const appDataScriptsDir = path.join(process.env.APPDATA || '', 'Antigravity', 'scripts');
+    const appDataScript = path.join(appDataScriptsDir, 'branch_conversation.py');
+    const altScript1 = path.join(os.homedir(), '.gemini', 'antigravity', 'scripts', 'branch_conversation.py');
+    const altScript2 = path.join(__dirname, 'scripts', 'branch_conversation.py');
+    let pythonScript = appDataScript;
+    if (!fs.existsSync(pythonScript)) {
+        if (fs.existsSync(altScript1)) pythonScript = altScript1;
+        else if (fs.existsSync(altScript2)) pythonScript = altScript2;
+    }
+    const pythonCandidates = [
+        path.join(os.homedir(), 'anaconda3', 'python.exe'),
+        path.join(os.homedir(), 'miniconda3', 'python.exe'),
+        path.join(process.env.LOCALAPPDATA || '', 'Programs', 'Python', 'Python312', 'python.exe'),
+        path.join(process.env.LOCALAPPDATA || '', 'Programs', 'Python', 'Python311', 'python.exe'),
+        path.join(process.env.LOCALAPPDATA || '', 'Programs', 'Python', 'Python310', 'python.exe'),
+        path.join(process.env.LOCALAPPDATA || '', 'Programs', 'Python', 'Python39', 'python.exe')
+    ];
+    let pythonExe = 'python';
+    for (const cand of pythonCandidates) {
+        if (fs.existsSync(cand)) {
+            pythonExe = cand;
+            break;
+        }
+    }
     return new Promise((resolve) => {
         const child = childProcess.spawn(pythonExe, [pythonScript], {
             env: { ...process.env, PYTHONIOENCODING: 'utf-8' },

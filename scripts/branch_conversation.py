@@ -36,7 +36,7 @@ def find_prune_step(source_id, turn_index=None, snippet=None):
     gemini_dir = get_gemini_dir()
     log_path = gemini_dir / "brain" / source_id / ".system_generated" / "logs" / "transcript.jsonl"
     if not log_path.exists():
-        return None
+        return None, None
 
     turns = []
     current_turn = None
@@ -76,27 +76,30 @@ def find_prune_step(source_id, turn_index=None, snippet=None):
         turns.append(current_turn)
 
     if not turns:
-        return None
+        return None, None
 
     # 1. 优先按消息内容片段精确匹配
     if snippet and len(snippet.strip()) >= 4:
         clean = " ".join(snippet.strip().split())[:50]
-        for t in turns:
+        for idx, t in enumerate(turns):
             u_clean = " ".join(t["user_content"].split())
             a_clean = " ".join(t["assistant_content"].split())
             if clean in u_clean or clean in a_clean:
-                return t["last_step"]
+                return t["last_step"], idx
             short = clean[:20]
             if len(short) >= 4 and (short in u_clean or short in a_clean):
-                return t["last_step"]
+                return t["last_step"], idx
 
     # 2. 其次按轮次索引匹配
     if turn_index is not None and 0 <= turn_index < len(turns):
-        return turns[turn_index]["last_step"]
+        return turns[turn_index]["last_step"], turn_index
 
-    return None
+    return None, None
 
-def branch_conversation(source_id=None, branch_title=None, up_to_step=None, turn_index=None, snippet=None):
+def branch_conversation(source_id=None, branch_title=None, up_to_step=None, turn_index=None, snippet=None, **kwargs):
+    if not branch_title and "title" in kwargs:
+        branch_title = kwargs["title"]
+
     gemini_dir = get_gemini_dir()
     sum_db_path = gemini_dir / "conversation_summaries.db"
     
@@ -109,9 +112,16 @@ def branch_conversation(source_id=None, branch_title=None, up_to_step=None, turn
     if not source_id:
         raise ValueError("未能找到当前活跃的会话 ID")
 
-    # 2. 如果未指定具体步数，但指定了轮次或消息文本片段，自动定位截断步数
+    # 2. 如果未指定具体步数，但指定了轮次或消息文本片段，自动定位截断步数与轮次
+    cutoff_turn_index = turn_index
     if up_to_step is None and (turn_index is not None or snippet is not None):
-        up_to_step = find_prune_step(source_id, turn_index, snippet)
+        up_to_step, matched_turn = find_prune_step(source_id, turn_index, snippet)
+        if cutoff_turn_index is None:
+            cutoff_turn_index = matched_turn
+    elif cutoff_turn_index is None and up_to_step is not None:
+        _, matched_turn = find_prune_step(source_id, snippet=snippet)
+        if matched_turn is not None:
+            cutoff_turn_index = matched_turn
 
     # 3. 读取源会话元数据
     conn_sum = sqlite3.connect(sum_db_path)
@@ -145,6 +155,35 @@ def branch_conversation(source_id=None, branch_title=None, up_to_step=None, turn
             if row_meta:
                 source_trajectory_id = row_meta[0]
             conn_dst.execute("UPDATE trajectory_meta SET cascade_id = ?, trajectory_id = ?", (new_id, new_trajectory_id))
+        except Exception:
+            pass
+
+        # 同步更新 trajectory_metadata_blob 内部二进制数据 (修复 ID 遗留不同步问题)
+        try:
+            blob_rows = conn_dst.execute("SELECT id, data FROM trajectory_metadata_blob").fetchall()
+            for b_id, b_data in blob_rows:
+                if b_data:
+                    new_b_data = bytes(b_data)
+                    import re as _re
+                    uuids = _re.findall(rb'[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}', new_b_data)
+                    if len(uuids) >= 2:
+                        new_b_data = new_b_data.replace(uuids[0], new_trajectory_id.encode())
+                        new_b_data = new_b_data.replace(uuids[1], new_id.encode())
+                    else:
+                        new_b_data = new_b_data.replace(source_id.encode(), new_id.encode())
+                        if source_trajectory_id:
+                            new_b_data = new_b_data.replace(source_trajectory_id.encode(), new_trajectory_id.encode())
+                    conn_dst.execute("UPDATE trajectory_metadata_blob SET data = ? WHERE id = ?", (new_b_data, b_id))
+        except Exception:
+            pass
+
+        # 同步更新 steps 表中的 step_payload (将旧会话 ID 替换为新会话 ID，避免跨会话遥测引用)
+        try:
+            step_rows = conn_dst.execute("SELECT idx, step_payload FROM steps WHERE step_payload IS NOT NULL").fetchall()
+            for s_idx, s_payload in step_rows:
+                if s_payload and source_id.encode() in s_payload:
+                    new_payload = bytes(s_payload).replace(source_id.encode(), new_id.encode())
+                    conn_dst.execute("UPDATE steps SET step_payload = ? WHERE idx = ?", (new_payload, s_idx))
         except Exception:
             pass
 
@@ -182,20 +221,33 @@ def branch_conversation(source_id=None, branch_title=None, up_to_step=None, turn
         if chunks_dir.exists():
             shutil.rmtree(chunks_dir, ignore_errors=True)
 
-        # 如果指定了修剪步数，修剪 transcript.jsonl 与 transcript_full.jsonl
+        # 如果指定了修剪步数，严格修剪 transcript.jsonl 与 transcript_full.jsonl
         if up_to_step is not None:
             for log_name in ["transcript.jsonl", "transcript_full.jsonl"]:
                 log_path = dst_brain / ".system_generated" / "logs" / log_name
                 if log_path.exists():
                     lines = []
+                    seen_user_turns = 0
                     with open(log_path, "r", encoding="utf-8", errors="ignore") as f:
                         for line in f:
                             try:
                                 item = json.loads(line)
-                                if item.get("step_index", 0) <= up_to_step:
-                                    lines.append(line)
+                                t = item.get("type")
+                                step_idx = item.get("step_index", 0)
+
+                                if t == "USER_INPUT":
+                                    if cutoff_turn_index is not None and seen_user_turns > cutoff_turn_index:
+                                        # 遇到下一个轮次的用户提问，彻底截断，停止后续读取！
+                                        break
+                                    seen_user_turns += 1
+
+                                if cutoff_turn_index is not None and seen_user_turns > (cutoff_turn_index + 1):
+                                    break
+
+                                if step_idx <= up_to_step:
+                                    lines.append(line.replace(source_id, new_id))
                             except Exception:
-                                lines.append(line)
+                                lines.append(line.replace(source_id, new_id))
                     with open(log_path, "w", encoding="utf-8") as f:
                         f.writelines(lines)
 
@@ -210,6 +262,16 @@ def branch_conversation(source_id=None, branch_title=None, up_to_step=None, turn
                             else:
                                 step_item.unlink(missing_ok=True)
                     except ValueError:
+                        pass
+        else:
+            # 全量克隆时，将日志中的旧 source_id 替换为新分支 new_id
+            for log_name in ["transcript.jsonl", "transcript_full.jsonl"]:
+                log_path = dst_brain / ".system_generated" / "logs" / log_name
+                if log_path.exists():
+                    try:
+                        content = log_path.read_text(encoding="utf-8", errors="ignore")
+                        log_path.write_text(content.replace(source_id, new_id), encoding="utf-8")
+                    except Exception:
                         pass
 
     # 6. 插入 conversation_summaries.db 新行

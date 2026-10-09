@@ -9,8 +9,20 @@ function scheduleSemanticUpdate() {
 }
 
 function getCurrentConversationId() {
-    const match = (location.hash || location.pathname || '').match(/([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})/i);
-    return match ? match[1] : '';
+    const urlStr = location.href || location.hash || location.pathname || '';
+    const match = urlStr.match(/([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})/i);
+    if (match) return match[1];
+    const domMatch = document.querySelector('[data-cascade-id], [data-conversation-id], [data-agy-active="true"]');
+    if (domMatch) {
+        const id = domMatch.getAttribute('data-cascade-id') || domMatch.getAttribute('data-conversation-id');
+        if (id && /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(id)) return id;
+    }
+    const linkMatch = document.querySelector('a[href*="/c/"]');
+    if (linkMatch && linkMatch.getAttribute('href')) {
+        const m = linkMatch.getAttribute('href').match(/([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})/i);
+        if (m) return m[1];
+    }
+    return '';
 }
 
 /* --- [AGY UI 增强 1] 顶部新建分支按钮 --- */
@@ -360,7 +372,11 @@ function openBranchModal(options = {}) {
           setTimeout(() => {
             closeModal();
             // 自动无缝切换到新分支会话
-            if (location.hash && location.hash.startsWith('#/c/')) {
+            if (location.hash && location.hash.includes('/c/')) {
+              window.location.hash = '#/c/' + res.branchId;
+            } else if (location.pathname && location.pathname.includes('/c/')) {
+              window.location.href = location.pathname.replace(/\/c\/[^\/?#]+/, '/c/' + res.branchId);
+            } else if (location.href.includes('#')) {
               window.location.hash = '#/c/' + res.branchId;
             } else {
               window.location.href = '/c/' + res.branchId;
