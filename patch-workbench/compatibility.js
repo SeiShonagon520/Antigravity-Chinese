@@ -323,13 +323,236 @@ electron_1.ipcMain.handle('agy:get-side-chat-context', async (event, args = {}) 
 electron_1.ipcMain.handle('agy:side-chat-query', async (event, args = {}) => {
     const https = require('https');
     const http = require('http');
+    const os = require('os');
+    const path = require('path');
+    const fs = require('fs');
     const { messages = [], provider = {}, baselineContext = {} } = args;
 
+    const pType = provider.type || 'native';
     const apiKey = (provider.apiKey || '').trim();
     let baseUrl = (provider.baseUrl || '').trim();
     let model = (provider.model || '').trim();
-    const pType = provider.type || 'deepseek';
 
+    const baseSummary = [
+        '[Antigravity 侧边智能助手 · Codex 模式]',
+        baselineContext.title ? ('- 主任务目标: ' + baselineContext.title) : null,
+        baselineContext.latestUserPrompt ? ('- 最近用户指令: ' + baselineContext.latestUserPrompt.slice(0, 300)) : null,
+        baselineContext.recentFiles && baselineContext.recentFiles.length ? ('- 涉及相关文件: ' + baselineContext.recentFiles.join(', ')) : null,
+        baselineContext.recentErrors ? ('- 主会话最近报错: ' + baselineContext.recentErrors.slice(0, 300)) : null,
+        '请针对用户的侧边提问做出精简、专业、切题的解答。如果涉及代码，请用 Markdown 代码块展示。探讨过程独立于主会话。'
+    ].filter(Boolean).join('\\n');
+
+    async function getAntigravityNativeToken() {
+        const toolsDir = path.join(os.homedir(), '.gemini', 'antigravity', 'tools');
+        const accountsFile = path.join(toolsDir, 'accounts.json');
+        if (!fs.existsSync(accountsFile)) {
+            throw new Error('未找到 Antigravity 账户配置文件，请确认客户端已登录');
+        }
+        const accMeta = JSON.parse(fs.readFileSync(accountsFile, 'utf8'));
+        const currentId = accMeta.current_account_id || (accMeta.accounts && accMeta.accounts[0] && accMeta.accounts[0].id);
+        if (!currentId) {
+            throw new Error('未检测到有效的已登录 Antigravity 账号');
+        }
+
+        const detailFile = path.join(toolsDir, 'accounts', currentId + '.json');
+        if (!fs.existsSync(detailFile)) {
+            throw new Error('未找到账户凭证详情文件');
+        }
+        const accDetail = JSON.parse(fs.readFileSync(detailFile, 'utf8'));
+        let accessToken = accDetail.token && accDetail.token.access_token;
+        const refreshToken = accDetail.token && accDetail.token.refresh_token;
+        const expiryTimestamp = accDetail.token && accDetail.token.expiry_timestamp;
+        const projectId = (accDetail.token && accDetail.token.project_id) || 'aicode-consumers';
+
+        const nowSec = Math.floor(Date.now() / 1000);
+        if (!accessToken || (expiryTimestamp && nowSec >= expiryTimestamp - 120)) {
+            if (!refreshToken) {
+                throw new Error('当前账户缺少 Refresh Token，请在客户端重新登录');
+            }
+            const postBody = new URLSearchParams({
+                client_id: '1071006060591-tmhssin2h21lcre235vtolojh4g403ep.apps.googleusercontent.com',
+                client_secret: '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',
+                refresh_token: refreshToken,
+                grant_type: 'refresh_token'
+            }).toString();
+
+            const refreshRes = await new Promise((resolve, reject) => {
+                const req = https.request('https://oauth2.googleapis.com/token', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                        'Content-Length': Buffer.byteLength(postBody)
+                    },
+                    timeout: 15000
+                }, (res) => {
+                    let raw = '';
+                    res.on('data', c => raw += c);
+                    res.on('end', () => resolve({ status: res.statusCode, data: raw }));
+                });
+                req.on('error', reject);
+                req.on('timeout', () => { req.destroy(); reject(new Error('刷新 Token 网络超时')); });
+                req.write(postBody);
+                req.end();
+            });
+
+            if (refreshRes.status !== 200) {
+                throw new Error('刷新 Antigravity 凭证失败 HTTP ' + refreshRes.status + ': ' + refreshRes.data.slice(0, 200));
+            }
+            const parsed = JSON.parse(refreshRes.data);
+            if (!parsed.access_token) {
+                throw new Error('OAuth 响应未包含 access_token');
+            }
+            accessToken = parsed.access_token;
+            try {
+                accDetail.token = accDetail.token || {};
+                accDetail.token.access_token = accessToken;
+                accDetail.token.expiry_timestamp = nowSec + (parsed.expires_in || 3600);
+                fs.writeFileSync(detailFile, JSON.stringify(accDetail, null, 2), 'utf8');
+            } catch (_) {}
+        }
+
+        return { accessToken, projectId };
+    }
+
+    async function callAntigravityNativeGenerate({ messages = [], systemInstruction = '', model = 'gemini-3.6-flash-high' }) {
+        const { accessToken, projectId } = await getAntigravityNativeToken();
+
+        const contents = [];
+        for (const m of messages) {
+            const role = m.role === 'assistant' ? 'model' : 'user';
+            const text = (m.content || '').trim();
+            if (!text) continue;
+            contents.push({ role, parts: [{ text }] });
+        }
+
+        if (contents.length === 0) {
+            throw new Error('消息列表为空');
+        }
+
+        if (contents[0].role !== 'user') {
+            contents.unshift({ role: 'user', parts: [{ text: '你好' }] });
+        }
+
+        const reqObj = {
+            project: projectId || 'aicode-consumers',
+            model: model || 'gemini-3.6-flash-high',
+            request: { contents }
+        };
+        if (systemInstruction) {
+            reqObj.request.systemInstruction = { parts: [{ text: systemInstruction }] };
+        }
+
+        const candidateModels = [model || 'gemini-3.6-flash-high', 'gemini-2.5-flash', 'gemini-3.1-flash-lite'];
+        const modelsToTry = [...new Set(candidateModels)];
+
+        let lastErr = null;
+        for (const tryModel of modelsToTry) {
+            reqObj.model = tryModel;
+            const currentPayload = JSON.stringify(reqObj);
+
+            try {
+                const generateRes = await new Promise((resolve, reject) => {
+                    const req = https.request('https://daily-cloudcode-pa.googleapis.com/v1internal:streamGenerateContent?alt=sse', {
+                        method: 'POST',
+                        headers: {
+                            'Authorization': 'Bearer ' + accessToken,
+                            'Content-Type': 'application/json',
+                            'User-Agent': 'antigravity',
+                            'Content-Length': Buffer.byteLength(currentPayload)
+                        },
+                        timeout: 45000
+                    }, (res) => {
+                        let raw = '';
+                        res.on('data', c => raw += c);
+                        res.on('end', () => resolve({ status: res.statusCode, data: raw }));
+                    });
+                    req.on('error', reject);
+                    req.on('timeout', () => { req.destroy(); reject(new Error('请求超时 (45s)')); });
+                    req.write(currentPayload);
+                    req.end();
+                });
+
+                if (generateRes.status === 200) {
+                    let fullText = '';
+                    const lines = generateRes.data.split('\\n');
+                    for (const line of lines) {
+                        const trimmed = line.trim();
+                        if (trimmed.startsWith('data: ')) {
+                            try {
+                                const item = JSON.parse(trimmed.slice(6));
+                                const parts = item.response?.candidates?.[0]?.content?.parts ||
+                                              item.candidates?.[0]?.content?.parts;
+                                if (parts) {
+                                    for (const p of parts) {
+                                        if (p.text) fullText += p.text;
+                                    }
+                                }
+                            } catch (_) {}
+                        }
+                    }
+                    if (fullText.trim()) {
+                        return { success: true, text: fullText.trim(), model: tryModel };
+                    }
+                } else {
+                    lastErr = new Error('HTTP ' + generateRes.status + ': ' + generateRes.data.slice(0, 300));
+                }
+            } catch (e) {
+                lastErr = e;
+            }
+        }
+
+        throw lastErr || new Error('原生模型响应为空');
+    }
+
+    // 1. 原生反重力模型（默认 · 开箱即用 · 无需第三方 API Key）
+    if (pType === 'native' || (!apiKey && pType !== 'ollama')) {
+        try {
+            const nativeRes = await callAntigravityNativeGenerate({
+                messages,
+                systemInstruction: baseSummary,
+                model: model || 'gemini-3.6-flash-high'
+            });
+            return { success: true, text: nativeRes.text, isNative: true, model: nativeRes.model };
+        } catch (nativeErr) {
+            console.error('[SideChat] 原生反重力模型调用异常:', nativeErr.message);
+            const lastUserMsg = messages.filter(m => m.role === 'user').pop();
+            const userQuery = lastUserMsg ? lastUserMsg.content.trim() : '';
+
+            let offlineAnswer = '';
+            if (/总结|进度|状态|做什么|干什么/.test(userQuery)) {
+                offlineAnswer = '### 📋 主任务当前进展快照 (离线快照)\\n\\n' +
+                    '- **目标**: ' + (baselineContext.title || '当前工作区任务') + '\\n' +
+                    '- **最近指令**: ' + (baselineContext.latestUserPrompt || '暂无详细输入') + '\\n' +
+                    '- **最近处理文件**: ' + (baselineContext.recentFiles && baselineContext.recentFiles.length ? baselineContext.recentFiles.join(', ') : '暂无文件变更') + '\\n' +
+                    '- **步骤总数**: ' + (baselineContext.totalSteps || 0) + ' 步\\n\\n' +
+                    '> 💡 **提示**：反重力原生服务暂不可用 (' + nativeErr.message + ')。请检查客户端登录与联网状态，或在右上角 **⚙️ 设置** 中切换自定义服务商。';
+            } else if (/报错|错误|error|fail|bug/i.test(userQuery)) {
+                if (baselineContext.recentErrors) {
+                    const fence = String.fromCharCode(96, 96, 96);
+                    offlineAnswer = '### 🔍 主任务最近捕获的异常信息\\n\\n' +
+                        fence + '\\n' + baselineContext.recentErrors + '\\n' + fence + '\\n\\n' +
+                        '**排查建议**：\\n' +
+                        '1. 请检查涉及的相关文件语法或环境依赖。\\n' +
+                        '2. 点击下方「📌 引用到主输入框」可一键将报错分析发送给主智能体进行自动修复。';
+                } else {
+                    offlineAnswer = '### ✅ 未检测到明显的执行报错\\n主任务当前运行状态正常，未在最近的执行日志中发现异常中断。';
+                }
+            } else if (/文件|代码|修改/.test(userQuery)) {
+                const tick = String.fromCharCode(96);
+                offlineAnswer = '### 📂 当前任务相关文件列表\\n\\n' +
+                    (baselineContext.recentFiles && baselineContext.recentFiles.length ? baselineContext.recentFiles.map(f => '- ' + tick + f + tick).join('\\n') : '目前尚未记录到文件写入操作。') +
+                    '\\n\\n你可以点击下方按钮将需要修改的具体指示填入主对话。';
+            } else {
+                return {
+                    success: false,
+                    error: '反重力原生算力连接异常: ' + nativeErr.message + ' (请确认客户端已登录并能够正常联网)'
+                };
+            }
+            return { success: true, text: offlineAnswer, isOffline: true };
+        }
+    }
+
+    // 2. 自定义第三方模型（DeepSeek / OpenAI / Gemini / 本地 Ollama）
     if (!baseUrl) {
         if (pType === 'deepseek') {
             baseUrl = 'https://api.deepseek.com/v1';
@@ -344,56 +567,6 @@ electron_1.ipcMain.handle('agy:side-chat-query', async (event, args = {}) => {
             baseUrl = 'http://localhost:11434/v1';
             if (!model) model = 'qwen2.5-coder';
         }
-    }
-
-    const baseSummary = [
-        '[Antigravity 主任务基准上下文 (Codex 侧边辅助)]',
-        baselineContext.title ? ('- 主任务目标: ' + baselineContext.title) : null,
-        baselineContext.latestUserPrompt ? ('- 最近用户指令: ' + baselineContext.latestUserPrompt.slice(0, 250)) : null,
-        baselineContext.recentFiles && baselineContext.recentFiles.length ? ('- 涉及相关文件: ' + baselineContext.recentFiles.join(', ')) : null,
-        baselineContext.recentErrors ? ('- 主会话最近报错: ' + baselineContext.recentErrors.slice(0, 250)) : null,
-        '请针对用户的侧边提问做出精简、专业、切题的解答。如果涉及代码，请用 Markdown 代码块展示。'
-    ].filter(Boolean).join('\\n');
-
-    // If no API key and not Ollama, run smart offline analysis
-    if (!apiKey && pType !== 'ollama') {
-        const lastUserMsg = messages.filter(m => m.role === 'user').pop();
-        const userQuery = lastUserMsg ? lastUserMsg.content.trim() : '';
-        
-        let offlineAnswer = '';
-        if (/总结|进度|状态|做什么|干什么/.test(userQuery)) {
-            offlineAnswer = '### 📋 主任务当前进展快照\\n\\n' +
-                '- **目标**: ' + (baselineContext.title || '当前工作区任务') + '\\n' +
-                '- **最近指令**: ' + (baselineContext.latestUserPrompt || '暂无详细输入') + '\\n' +
-                '- **最近处理文件**: ' + (baselineContext.recentFiles && baselineContext.recentFiles.length ? baselineContext.recentFiles.join(', ') : '暂无文件变更') + '\\n' +
-                '- **步骤总数**: ' + (baselineContext.totalSteps || 0) + ' 步\\n\\n' +
-                '> 💡 **提示**：如需与云端大模型进行深度自由问答，请点击右上角 **⚙️ 设置** 配置 API Key（支持 DeepSeek / OpenAI / Gemini / 本地 Ollama）。';
-        } else if (/报错|错误|error|fail|bug/i.test(userQuery)) {
-            if (baselineContext.recentErrors) {
-                const fence = String.fromCharCode(96, 96, 96);
-                offlineAnswer = '### 🔍 主任务最近捕获的异常信息\\n\\n' +
-                    fence + '\\n' + baselineContext.recentErrors + '\\n' + fence + '\\n\\n' +
-                    '**排查建议**：\\n' +
-                    '1. 请检查涉及的相关文件语法或环境依赖。\\n' +
-                    '2. 点击下方「📌 引用到主输入框」可一键将报错分析发送给主智能体进行自动修复。';
-            } else {
-                offlineAnswer = '### ✅ 未检测到明显的执行报错\\n主任务当前运行状态正常，未在最近的执行日志中发现异常中断。如需分析特定错误，请将错误信息直接发在对话中或在右上角 **⚙️ 设置** 中接入大模型。';
-            }
-        } else if (/文件|代码|修改/.test(userQuery)) {
-            const tick = String.fromCharCode(96);
-            offlineAnswer = '### 📂 当前任务相关文件列表\\n\\n' +
-                (baselineContext.recentFiles && baselineContext.recentFiles.length ? baselineContext.recentFiles.map(f => '- ' + tick + f + tick).join('\\n') : '目前尚未记录到文件写入操作。') +
-                '\\n\\n你可以点击下方按钮将需要修改的具体指示填入主对话。';
-        } else {
-            offlineAnswer = '### 💬 侧边对话智能就绪\\n\\n' +
-                '当前正在针对主任务 **「' + (baselineContext.title || '当前对话') + '」** 进行侧向探讨。\\n\\n' +
-                '**当前基准上下文：**\\n' +
-                '- 涉及文件：' + (baselineContext.recentFiles && baselineContext.recentFiles.length ? baselineContext.recentFiles.join(', ') : '暂无') + '\\n' +
-                '- 最近动作：' + (baselineContext.latestAssistantResponse ? baselineContext.latestAssistantResponse.slice(0, 100) + '...' : '等待中') + '\\n\\n' +
-                '⚙️ **开启完整大模型对话能力**：\\n' +
-                '点击侧边栏右上角 **⚙️ 设置**，即可无缝配置 **DeepSeek (推荐)**、**OpenAI**、**Gemini** 或 **本地 Ollama**，享受无限制的并行头脑风暴！';
-        }
-        return { success: true, text: offlineAnswer, isOffline: true };
     }
 
     try {

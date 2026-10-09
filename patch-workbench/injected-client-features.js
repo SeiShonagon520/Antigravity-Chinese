@@ -919,13 +919,20 @@ function sendTextToMainComposer(text) {
 function getSideChatProviderConfig() {
     try {
         const raw = localStorage.getItem('agy_side_chat_provider');
-        if (raw) return JSON.parse(raw);
+        if (raw) {
+            const parsed = JSON.parse(raw);
+            if (parsed.type === 'deepseek' && !parsed.apiKey) {
+                parsed.type = 'native';
+                parsed.model = 'gemini-3.6-flash-high';
+            }
+            return parsed;
+        }
     } catch (_) {}
     return {
-        type: 'deepseek',
+        type: 'native',
         apiKey: '',
-        baseUrl: 'https://api.deepseek.com/v1',
-        model: 'deepseek-chat'
+        baseUrl: '',
+        model: 'gemini-3.6-flash-high'
     };
 }
 
@@ -951,7 +958,7 @@ function ensureSideChatPanel() {
         <div class="agy-side-header-title">
           <span style="font-size:16px;">💬</span>
           <span>侧边对话</span>
-          <span class="agy-side-badge">⚡ 零污染 · 独立上下文</span>
+          <span class="agy-side-badge">⚡ 反重力原生核心 · 零污染</span>
         </div>
         <div class="agy-side-header-actions">
           <button class="agy-side-icon-btn" id="agy-side-quote-all-btn" type="button" title="提取当前结论并填入主对话输入框">
@@ -1181,10 +1188,14 @@ function renderSideChatMessages() {
     if (!agySideChatMessages || agySideChatMessages.length === 0) {
         container.innerHTML = `
           <div class="agy-side-hero">
-            <div class="agy-side-hero-icon">⚡</div>
+            <div class="agy-side-hero-icon">✨</div>
             <h3 class="agy-side-hero-title">Codex 风格侧边对话</h3>
-            <p class="agy-side-hero-desc">在此处自由探讨、头脑风暴或测试草稿，绝不污染主任务的上下文与步骤历史！</p>
+            <p class="agy-side-hero-desc">已直连 Antigravity 官方原生模型！在此处自由探讨、头脑风暴或代码推演，绝不污染主任务的上下文与步骤历史！</p>
             <div class="agy-side-hero-features">
+              <div class="agy-side-feature-card">
+                <div style="font-weight:600;color:#38bdf8;margin-bottom:2px;">🌟 原生免 Key</div>
+                开箱即用，无需配置 API Key，直连当前登录账号核心算力。
+              </div>
               <div class="agy-side-feature-card">
                 <div style="font-weight:600;color:#38bdf8;margin-bottom:2px;">🛡️ 严格隔离</div>
                 不写入主任务历史，不消耗主任务上下文窗口。
@@ -1301,39 +1312,48 @@ function openSideChatSettingsModal() {
     modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.65);backdrop-filter:blur(8px);display:flex;align-items:center;justify-content:center;z-index:2147483647;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;';
 
     modal.innerHTML = `
-      <div style="background:rgba(22,25,32,0.98);color:#f1f5f9;border:1px solid rgba(255,255,255,0.15);border-radius:14px;padding:22px 24px;width:440px;box-shadow:0 24px 60px rgba(0,0,0,0.6);display:flex;flex-direction:column;gap:14px;">
+      <div style="background:rgba(22,25,32,0.98);color:#f1f5f9;border:1px solid rgba(255,255,255,0.15);border-radius:14px;padding:22px 24px;width:460px;box-shadow:0 24px 60px rgba(0,0,0,0.6);display:flex;flex-direction:column;gap:14px;">
         <div style="display:flex;align-items:center;gap:10px;">
           <div style="width:36px;height:36px;border-radius:10px;background:rgba(59,130,246,0.15);color:#3b82f6;display:flex;align-items:center;justify-content:center;font-size:18px;">⚙️</div>
           <div>
             <h3 style="margin:0;font-size:15px;font-weight:600;color:#f8fafc;">侧边对话模型配置</h3>
-            <p style="margin:2px 0 0 0;font-size:11px;color:#94a3b8;">支持接入常用云端模型或本地 Ollama（独立运行）</p>
+            <p style="margin:2px 0 0 0;font-size:11px;color:#94a3b8;">默认直连官方原生核心，亦可按需切换第三方模型</p>
           </div>
         </div>
 
         <div style="display:flex;flex-direction:column;gap:5px;">
-          <label style="font-size:12px;font-weight:500;color:#cbd5e1;">服务商预设：</label>
+          <label style="font-size:12px;font-weight:500;color:#cbd5e1;">模型来源 / 服务商：</label>
           <select id="agy-side-set-type" style="background:rgba(30,36,48,0.95);border:1px solid rgba(255,255,255,0.18);border-radius:8px;padding:8px 10px;color:#fff;font-size:12px;outline:none;cursor:pointer;">
-            <option value="deepseek" ${currentCfg.type === 'deepseek' ? 'selected' : ''}>DeepSeek (推荐 - 速度极快且实惠)</option>
+            <option value="native" ${currentCfg.type === 'native' ? 'selected' : ''}>🌟 Antigravity 官方原生模型 (默认 · 免Key · 开箱即用)</option>
+            <option value="deepseek" ${currentCfg.type === 'deepseek' ? 'selected' : ''}>DeepSeek (高速且便宜)</option>
             <option value="openai" ${currentCfg.type === 'openai' ? 'selected' : ''}>OpenAI (GPT-4o / GPT-4o-mini)</option>
-            <option value="gemini" ${currentCfg.type === 'gemini' ? 'selected' : ''}>Google Gemini (Gemini 1.5 Flash)</option>
+            <option value="gemini" ${currentCfg.type === 'gemini' ? 'selected' : ''}>Google Gemini (自定义 API Key)</option>
             <option value="ollama" ${currentCfg.type === 'ollama' ? 'selected' : ''}>本地 Ollama (完全离线隐私)</option>
             <option value="custom" ${currentCfg.type === 'custom' ? 'selected' : ''}>自定义 OpenAI 兼容接口</option>
           </select>
         </div>
 
-        <div style="display:flex;flex-direction:column;gap:5px;" id="agy-side-key-group">
+        <div id="agy-side-native-info" style="${currentCfg.type === 'native' ? 'display:block;' : 'display:none;'}background:rgba(56,189,248,0.1);border:1px solid rgba(56,189,248,0.25);border-radius:8px;padding:10px 12px;font-size:11px;color:#7dd3fc;line-height:1.6;">
+          🟢 <strong>原生直连模式已启用</strong><br/>
+          已自动绑定你当前登录的 Antigravity 账号与官方核心模型，直接使用内置 AI 算力，无需任何设置即可畅享快速响应！
+        </div>
+
+        <div style="display:${currentCfg.type === 'native' || currentCfg.type === 'ollama' ? 'none' : 'flex'};flex-direction:column;gap:5px;" id="agy-side-key-group">
           <label style="font-size:12px;font-weight:500;color:#cbd5e1;">API Key：</label>
           <input id="agy-side-set-key" type="password" value="${(currentCfg.apiKey || '').replace(/"/g, '&quot;')}" placeholder="sk-..." style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.18);border-radius:8px;padding:8px 10px;color:#fff;font-size:12px;outline:none;width:100%;box-sizing:border-box;" />
         </div>
 
-        <div style="display:flex;flex-direction:column;gap:5px;">
+        <div style="display:${currentCfg.type === 'native' ? 'none' : 'flex'};flex-direction:column;gap:5px;" id="agy-side-url-group">
           <label style="font-size:12px;font-weight:500;color:#cbd5e1;">Base URL：</label>
           <input id="agy-side-set-url" type="text" value="${(currentCfg.baseUrl || '').replace(/"/g, '&quot;')}" placeholder="https://api.deepseek.com/v1" style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.18);border-radius:8px;padding:8px 10px;color:#fff;font-size:12px;outline:none;width:100%;box-sizing:border-box;" />
         </div>
 
         <div style="display:flex;flex-direction:column;gap:5px;">
-          <label style="font-size:12px;font-weight:500;color:#cbd5e1;">模型标识 (Model)：</label>
-          <input id="agy-side-set-model" type="text" value="${(currentCfg.model || '').replace(/"/g, '&quot;')}" placeholder="deepseek-chat" style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.18);border-radius:8px;padding:8px 10px;color:#fff;font-size:12px;outline:none;width:100%;box-sizing:border-box;" />
+          <label style="font-size:12px;font-weight:500;color:#cbd5e1;">模型型号 (Model)：</label>
+          <input id="agy-side-set-model" type="text" value="${(currentCfg.model || (currentCfg.type === 'native' ? 'gemini-3.6-flash-high' : 'deepseek-chat')).replace(/"/g, '&quot;')}" placeholder="gemini-3.6-flash-high" style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.18);border-radius:8px;padding:8px 10px;color:#fff;font-size:12px;outline:none;width:100%;box-sizing:border-box;" />
+          <div style="font-size:10px;color:#94a3b8;margin-top:2px;" id="agy-side-model-hint">
+            ${currentCfg.type === 'native' ? '原生推荐：gemini-3.6-flash-high（高智商极速）、gemini-2.5-flash、gemini-3.1-flash-lite' : ''}
+          </div>
         </div>
 
         <div style="display:flex;align-items:center;justify-content:space-between;margin-top:6px;">
@@ -1353,31 +1373,54 @@ function openSideChatSettingsModal() {
     const urlInp = document.getElementById('agy-side-set-url');
     const modelInp = document.getElementById('agy-side-set-model');
     const keyGrp = document.getElementById('agy-side-key-group');
+    const urlGrp = document.getElementById('agy-side-url-group');
+    const nativeInfo = document.getElementById('agy-side-native-info');
+    const modelHint = document.getElementById('agy-side-model-hint');
 
     typeSel.addEventListener('change', () => {
         const val = typeSel.value;
-        if (val === 'deepseek') {
+        if (val === 'native') {
+            nativeInfo.style.display = 'block';
+            keyGrp.style.display = 'none';
+            urlGrp.style.display = 'none';
+            urlInp.value = '';
+            modelInp.value = 'gemini-3.6-flash-high';
+            modelHint.textContent = '原生推荐：gemini-3.6-flash-high（高智商极速）、gemini-2.5-flash、gemini-3.1-flash-lite';
+        } else if (val === 'deepseek') {
+            nativeInfo.style.display = 'none';
+            keyGrp.style.display = 'flex';
+            urlGrp.style.display = 'flex';
             urlInp.value = 'https://api.deepseek.com/v1';
             modelInp.value = 'deepseek-chat';
-            keyGrp.style.display = 'flex';
+            modelHint.textContent = '';
         } else if (val === 'openai') {
+            nativeInfo.style.display = 'none';
+            keyGrp.style.display = 'flex';
+            urlGrp.style.display = 'flex';
             urlInp.value = 'https://api.openai.com/v1';
             modelInp.value = 'gpt-4o-mini';
-            keyGrp.style.display = 'flex';
+            modelHint.textContent = '';
         } else if (val === 'gemini') {
+            nativeInfo.style.display = 'none';
+            keyGrp.style.display = 'flex';
+            urlGrp.style.display = 'flex';
             urlInp.value = 'https://generativelanguage.googleapis.com/v1beta/openai';
             modelInp.value = 'gemini-1.5-flash';
-            keyGrp.style.display = 'flex';
+            modelHint.textContent = '';
         } else if (val === 'ollama') {
+            nativeInfo.style.display = 'none';
+            keyGrp.style.display = 'none';
+            urlGrp.style.display = 'flex';
             urlInp.value = 'http://localhost:11434/v1';
             modelInp.value = 'qwen2.5-coder';
-            keyGrp.style.display = 'none';
+            modelHint.textContent = '';
+        } else if (val === 'custom') {
+            nativeInfo.style.display = 'none';
+            keyGrp.style.display = 'flex';
+            urlGrp.style.display = 'flex';
+            modelHint.textContent = '';
         }
     });
-
-    if (currentCfg.type === 'ollama') {
-        keyGrp.style.display = 'none';
-    }
 
     document.getElementById('agy-side-test-btn').addEventListener('click', async () => {
         const testBtn = document.getElementById('agy-side-test-btn');
@@ -1396,7 +1439,7 @@ function openSideChatSettingsModal() {
                 baselineContext: { title: '测试连接' }
             });
             if (res && res.success) {
-                testBtn.textContent = '✅ 连接成功!';
+                testBtn.textContent = `✅ 连接成功 (${res.model || testConfig.model || '就绪'})!`;
                 testBtn.style.color = '#4ade80';
             } else {
                 testBtn.textContent = '❌ 连接失败';
