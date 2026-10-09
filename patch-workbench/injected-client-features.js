@@ -1,4 +1,7 @@
+const agyIsTopWindow = (typeof window !== 'undefined' && window.self === window.top);
+
 function scheduleSemanticUpdate() {
+    if (!agyIsTopWindow) return;
     clearTimeout(semanticTimer);
     semanticTimer = setTimeout(() => {
         annotateSemanticDom();
@@ -72,25 +75,271 @@ function injectBranchButton() {
     target.container.insertBefore(branchBtn, target.refNode);
 }
 
-/* --- [AGY UI 增强 1.1] 顶部并排新窗口按钮 --- */
-async function toggleSideWindow() {
-    try {
-        if (typeof electron_1 !== 'undefined' && electron_1.ipcRenderer) {
-            const res = await electron_1.ipcRenderer.invoke('agy:toggle-side-window');
-            if (res && res.success) {
-                if (res.state === 'opened') {
-                    showBranchToast('🗗 已在右侧并排开启原生新窗口！');
-                } else if (res.state === 'closed') {
-                    showBranchToast('🗗 已关闭并排窗口，恢复主窗口');
-                } else if (res.state === 'aligned') {
-                    showBranchToast('🗗 左右窗口已重新对齐');
-                }
-            } else {
-                showBranchToast('⚠️ 并排窗口失败: ' + (res ? res.error : '未知错误'));
+/* --- [AGY UI 增强 1.1] 单窗口原生侧边对话 (Codex 模式) --- */
+let agySideChatOpen = false;
+let agySideChatWidth = parseInt(localStorage.getItem('agy-side-chat-width') || '460', 10);
+if (isNaN(agySideChatWidth) || agySideChatWidth < 320) agySideChatWidth = 460;
+
+function ensureNativeSideChatPanel() {
+    let panel = document.getElementById('agy-native-side-panel');
+    if (panel) return panel;
+
+    panel = document.createElement('div');
+    panel.id = 'agy-native-side-panel';
+    panel.style.position = 'fixed';
+    panel.style.top = '0';
+    panel.style.right = '0';
+    panel.style.bottom = '0';
+    panel.style.width = agySideChatWidth + 'px';
+    panel.style.zIndex = '9998';
+    panel.style.display = 'none';
+    panel.style.flexDirection = 'column';
+    panel.style.background = '#18181b';
+    panel.style.borderLeft = '1px solid rgba(255, 255, 255, 0.12)';
+    panel.style.boxShadow = '-4px 0 20px rgba(0, 0, 0, 0.35)';
+    panel.style.boxSizing = 'border-box';
+    panel.style.fontFamily = '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+
+    // 1. 拖拽调节宽度的把手 (Resizer)
+    const resizer = document.createElement('div');
+    resizer.id = 'agy-side-resizer';
+    resizer.title = '拖动调节侧边对话宽度';
+    resizer.style.position = 'absolute';
+    resizer.style.top = '0';
+    resizer.style.left = '-4px';
+    resizer.style.width = '8px';
+    resizer.style.height = '100%';
+    resizer.style.cursor = 'col-resize';
+    resizer.style.zIndex = '10';
+    resizer.style.userSelect = 'none';
+
+    let isResizingSidePanel = false;
+    let startX = 0;
+    let startWidth = agySideChatWidth;
+
+    resizer.addEventListener('mouseenter', () => {
+        if (!isResizingSidePanel) resizer.style.background = 'rgba(59, 130, 246, 0.4)';
+    });
+    resizer.addEventListener('mouseleave', () => {
+        if (!isResizingSidePanel) resizer.style.background = 'transparent';
+    });
+
+    resizer.addEventListener('mousedown', (e) => {
+        isResizingSidePanel = true;
+        startX = e.clientX;
+        startWidth = panel.offsetWidth;
+        resizer.style.background = 'rgba(59, 130, 246, 0.6)';
+        
+        const iframe = panel.querySelector('#agy-side-chat-iframe');
+        if (iframe) iframe.style.pointerEvents = 'none';
+        document.body.style.userSelect = 'none';
+
+        const onMouseMove = (moveEvt) => {
+            if (!isResizingSidePanel) return;
+            const delta = startX - moveEvt.clientX;
+            const newWidth = Math.max(320, Math.min(window.innerWidth * 0.75, startWidth + delta));
+            agySideChatWidth = Math.round(newWidth);
+            panel.style.width = agySideChatWidth + 'px';
+            applyMainContentLayout(true);
+        };
+
+        const onMouseUp = () => {
+            if (!isResizingSidePanel) return;
+            isResizingSidePanel = false;
+            resizer.style.background = 'transparent';
+            if (iframe) iframe.style.pointerEvents = 'auto';
+            document.body.style.userSelect = '';
+            localStorage.setItem('agy-side-chat-width', String(agySideChatWidth));
+            window.removeEventListener('mousemove', onMouseMove);
+            window.removeEventListener('mouseup', onMouseUp);
+        };
+
+        window.addEventListener('mousemove', onMouseMove);
+        window.addEventListener('mouseup', onMouseUp);
+    });
+
+    // 2. 顶部工具栏 (Header)
+    const header = document.createElement('div');
+    header.id = 'agy-side-header';
+    header.style.display = 'flex';
+    header.style.alignItems = 'center';
+    header.style.justifyContent = 'space-between';
+    header.style.height = '38px';
+    header.style.padding = '0 12px';
+    header.style.borderBottom = '1px solid rgba(255, 255, 255, 0.08)';
+    header.style.background = 'rgba(24, 24, 27, 0.95)';
+    header.style.backdropFilter = 'blur(10px)';
+    header.style.flexShrink = '0';
+    header.style.userSelect = 'none';
+
+    header.innerHTML = `
+        <div style="display:flex;align-items:center;gap:8px;">
+            <span style="font-size:14px;">💬</span>
+            <span style="font-size:12px;font-weight:600;color:#f3f4f6;letter-spacing:0.3px;">侧边对话</span>
+            <span style="font-size:10px;padding:1px 6px;border-radius:10px;background:rgba(34,197,94,0.15);color:#4ade80;font-weight:500;border:1px solid rgba(34,197,94,0.3);">原生引擎</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:4px;">
+            <button id="agy-side-btn-new" title="新开会话" style="background:none;border:none;color:#94a3b8;cursor:pointer;padding:4px 6px;border-radius:4px;font-size:12px;display:flex;align-items:center;">➕</button>
+            <button id="agy-side-btn-reload" title="刷新页面" style="background:none;border:none;color:#94a3b8;cursor:pointer;padding:4px 6px;border-radius:4px;font-size:12px;display:flex;align-items:center;">🔄</button>
+            <button id="agy-side-btn-popout" title="弹出为独立系统窗口" style="background:none;border:none;color:#94a3b8;cursor:pointer;padding:4px 6px;border-radius:4px;font-size:12px;display:flex;align-items:center;">🗗</button>
+            <button id="agy-side-btn-close" title="收起侧对话 (Ctrl+Shift+S)" style="background:none;border:none;color:#94a3b8;cursor:pointer;padding:4px 6px;border-radius:4px;font-size:13px;display:flex;align-items:center;margin-left:4px;">✕</button>
+        </div>
+    `;
+
+    // 3. 内容主体：内嵌原生 Antigravity 会话 Iframe
+    const bodyContainer = document.createElement('div');
+    bodyContainer.id = 'agy-side-body';
+    bodyContainer.style.flex = '1';
+    bodyContainer.style.width = '100%';
+    bodyContainer.style.height = 'calc(100% - 38px)';
+    bodyContainer.style.position = 'relative';
+    bodyContainer.style.overflow = 'hidden';
+
+    const iframe = document.createElement('iframe');
+    iframe.id = 'agy-side-chat-iframe';
+    iframe.style.width = '100%';
+    iframe.style.height = '100%';
+    iframe.style.border = 'none';
+    iframe.style.background = '#18181b';
+    iframe.src = window.location.origin + '/';
+
+    iframe.addEventListener('load', () => {
+        try {
+            const iDoc = iframe.contentDocument || iframe.contentWindow?.document;
+            if (iDoc) {
+                const style = iDoc.createElement('style');
+                style.id = 'agy-side-embed-style';
+                style.textContent = `
+                    header[data-testid="titlebar"],
+                    .titlebar-container,
+                    [data-agy-surface="titlebar"],
+                    #agy-composer-pet,
+                    #agy-branch-btn,
+                    #agy-side-chat-btn,
+                    #agy-native-side-panel {
+                        display: none !important;
+                    }
+                    html, body, #root {
+                        height: 100% !important;
+                        width: 100% !important;
+                        overflow: hidden !important;
+                    }
+                `;
+                iDoc.head.appendChild(style);
             }
+        } catch (e) {
+            console.warn('[SideChat] iframe 样式注入跳过:', e);
         }
-    } catch (err) {
-        console.error('toggleSideWindow error:', err);
+    });
+
+    bodyContainer.appendChild(iframe);
+    panel.appendChild(resizer);
+    panel.appendChild(header);
+    panel.appendChild(bodyContainer);
+    document.body.appendChild(panel);
+
+    header.querySelector('#agy-side-btn-new').onclick = () => {
+        try {
+            iframe.contentWindow.location.href = window.location.origin + '/';
+        } catch (_) {
+            iframe.src = window.location.origin + '/';
+        }
+        showBranchToast('💬 侧边对话已重置为新会话');
+    };
+
+    header.querySelector('#agy-side-btn-reload').onclick = () => {
+        try {
+            iframe.contentWindow.location.reload();
+        } catch (_) {
+            iframe.src = iframe.src;
+        }
+        showBranchToast('🔄 侧边对话已刷新');
+    };
+
+    header.querySelector('#agy-side-btn-popout').onclick = () => {
+        toggleNativeSideChat(false);
+        if (typeof electron_1 !== 'undefined' && electron_1.ipcRenderer) {
+            electron_1.ipcRenderer.invoke('agy:toggle-side-window', { action: 'open' });
+        }
+    };
+
+    header.querySelector('#agy-side-btn-close').onclick = () => {
+        toggleNativeSideChat(false);
+    };
+
+    header.querySelectorAll('button').forEach(btn => {
+        btn.addEventListener('mouseenter', () => {
+            btn.style.background = 'rgba(255, 255, 255, 0.08)';
+            btn.style.color = '#fff';
+        });
+        btn.addEventListener('mouseleave', () => {
+            btn.style.background = 'none';
+            btn.style.color = '#94a3b8';
+        });
+    });
+
+    return panel;
+}
+
+function applyMainContentLayout(isInstant = false) {
+    const rootEl = document.getElementById('root');
+    if (!rootEl) return;
+    if (agySideChatOpen) {
+        if (!isInstant) {
+            rootEl.style.transition = 'width 0.18s cubic-bezier(0.16, 1, 0.3, 1), margin-right 0.18s cubic-bezier(0.16, 1, 0.3, 1)';
+        } else {
+            rootEl.style.transition = 'none';
+        }
+        rootEl.style.width = `calc(100% - ${agySideChatWidth}px)`;
+        rootEl.style.marginRight = `${agySideChatWidth}px`;
+    } else {
+        rootEl.style.transition = 'width 0.18s cubic-bezier(0.16, 1, 0.3, 1), margin-right 0.18s cubic-bezier(0.16, 1, 0.3, 1)';
+        rootEl.style.width = '100%';
+        rootEl.style.marginRight = '0px';
+    }
+}
+
+function toggleNativeSideChat(forceState) {
+    const panel = ensureNativeSideChatPanel();
+    if (!panel) return;
+
+    if (typeof forceState === 'boolean') {
+        agySideChatOpen = forceState;
+    } else {
+        agySideChatOpen = !agySideChatOpen;
+    }
+
+    if (agySideChatOpen) {
+        panel.style.display = 'flex';
+        panel.style.width = agySideChatWidth + 'px';
+        applyMainContentLayout(false);
+        updateSideChatButtonState(true);
+        showBranchToast('💬 已在右侧展开原生侧边对话');
+        setTimeout(() => {
+            const iframe = panel.querySelector('#agy-side-chat-iframe');
+            if (iframe && iframe.contentWindow) {
+                iframe.contentWindow.focus();
+            }
+        }, 100);
+    } else {
+        panel.style.display = 'none';
+        applyMainContentLayout(false);
+        updateSideChatButtonState(false);
+        showBranchToast('💬 已收起侧边对话');
+    }
+}
+
+function updateSideChatButtonState(isOpen) {
+    const btn = document.getElementById('agy-side-chat-btn');
+    if (!btn) return;
+    if (isOpen) {
+        btn.style.background = 'rgba(59, 130, 246, 0.18)';
+        btn.style.borderColor = 'rgba(59, 130, 246, 0.4)';
+        btn.style.color = '#60a5fa';
+    } else {
+        btn.style.background = '';
+        btn.style.borderColor = '';
+        btn.style.color = '';
     }
 }
 
@@ -102,7 +351,7 @@ function injectSideChatButton() {
     const sideChatBtn = document.createElement('button');
     sideChatBtn.id = 'agy-side-chat-btn';
     sideChatBtn.type = 'button';
-    sideChatBtn.title = '并排新窗口 (快捷键 Ctrl+Shift+S) - 自动左/右分屏独立原生会话';
+    sideChatBtn.title = '侧边对话 (快捷键 Ctrl+Shift+S) - 像 Codex 一样在当前窗口内原生分屏对话';
     sideChatBtn.className = target.baseClass;
     sideChatBtn.style.marginRight = '6px';
     sideChatBtn.style.display = 'inline-flex';
@@ -115,11 +364,11 @@ function injectSideChatButton() {
     sideChatBtn.style.fontSize = '12px';
     sideChatBtn.style.cursor = 'pointer';
     sideChatBtn.style.transition = 'all 0.2s cubic-bezier(0.16, 1, 0.3, 1)';
-    sideChatBtn.innerHTML = '<span style="font-size: 13px;">🗗</span><span>并排新窗口</span>';
+    sideChatBtn.innerHTML = '<span style="font-size: 13px;">💬</span><span>侧边对话</span>';
 
     sideChatBtn.addEventListener('click', (e) => {
         e.stopPropagation();
-        toggleSideWindow();
+        toggleNativeSideChat();
     });
 
     target.container.insertBefore(sideChatBtn, target.refNode);
@@ -521,12 +770,13 @@ function sendTextToMainComposer(text) {
 }
 
 window.addEventListener('keydown', (e) => {
+    if (!agyIsTopWindow) return;
     if (e.ctrlKey && e.shiftKey && (e.key === 'B' || e.key === 'b')) {
         e.preventDefault();
         openBranchModal();
     } else if (e.ctrlKey && e.shiftKey && (e.key === 'S' || e.key === 's')) {
         e.preventDefault();
-        toggleSideWindow();
+        toggleNativeSideChat();
     }
 });
 
