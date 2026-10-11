@@ -616,6 +616,21 @@ function buildCompatibleTree(options) {
     fs.writeFileSync(menuPath, menuSource, 'utf8');
     report.files.push({ file: 'dist/menu.js', rebuiltBytes: fs.statSync(menuPath).size });
   }
+  const updaterPath = path.join(officialDir, 'dist', 'updater.js');
+  if (fs.existsSync(updaterPath)) {
+    let updaterSource = fs.readFileSync(updaterPath, 'utf8');
+    updaterSource = updaterSource.replace(
+      'electron_updater_1.autoUpdater.autoDownload = true;',
+      'electron_updater_1.autoUpdater.autoDownload = false; // 禁用静默后台自动下载新版本，防止冲刷汉化与补丁'
+    );
+    updaterSource = updaterSource.replace(
+      'electron_updater_1.autoUpdater.autoInstallOnAppQuit = electron_1.app.isPackaged;',
+      'electron_updater_1.autoUpdater.autoInstallOnAppQuit = false; // 禁用退出时静默自动安装覆盖 app.asar'
+    );
+    syntaxCheck('dist/updater.js', updaterSource);
+    fs.writeFileSync(updaterPath, updaterSource, 'utf8');
+    report.files.push({ file: 'dist/updater.js', rebuiltBytes: fs.statSync(updaterPath).size });
+  }
   return report;
 }
 

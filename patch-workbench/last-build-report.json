@@ -1,11 +1,11 @@
 {
   "ok": true,
   "officialAsar": "C:\\Users\\L\\AppData\\Local\\Programs\\Antigravity\\resources\\app.asar.original",
-  "officialVersion": "2.21.1",
-  "officialSha256": "d075e5d9ff01f8806016aa88c39bf1429f068a941fdbe46147d8409843e62113",
+  "officialVersion": "2.22.0",
+  "officialSha256": "259c83ffa266088dda6ede520a601bbf06cc5c34985cdf56c5d68549c98dbb0e",
   "outputAsar": "D:\\github\\Antigravity-Chinese\\assets\\app.asar",
-  "outputSize": 5252642,
-  "outputSha256": "2f339ff745fbf9e3709665bedee590249fa35e00d09ae1b547eda17ad1d495f5",
+  "outputSize": 5105727,
+  "outputSha256": "39052730ca64e74d1b0a2f286f19eee8c69aaa1731ba025f180c697314ed3c19",
   "compatibility": {
     "files": [
       {
@@ -46,6 +46,10 @@
       {
         "file": "dist/menu.js",
         "rebuiltBytes": 6512
+      },
+      {
+        "file": "dist/updater.js",
+        "rebuiltBytes": 14567
       }
     ],
     "appliedRuntimeRules": [
