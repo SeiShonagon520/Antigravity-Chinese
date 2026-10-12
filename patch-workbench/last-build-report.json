@@ -4,14 +4,14 @@
   "officialVersion": "2.22.0",
   "officialSha256": "259c83ffa266088dda6ede520a601bbf06cc5c34985cdf56c5d68549c98dbb0e",
   "outputAsar": "D:\\github\\Antigravity-Chinese\\assets\\app.asar",
-  "outputSize": 5146914,
-  "outputSha256": "fcb58824a5e9c2d07dfff13e322b78cad289d4eeb5a34741eb94c3f5d5df1b8b",
+  "outputSize": 5150294,
+  "outputSha256": "b134ad0f694d2ed9c15c9f1071016825fd0863d17afe5861e46b1a22a68d4905",
   "compatibility": {
     "files": [
       {
         "file": "dist/preload.js",
         "officialBytes": 5409,
-        "rebuiltBytes": 536276
+        "rebuiltBytes": 539656
       },
       {
         "file": "dist/main.js",

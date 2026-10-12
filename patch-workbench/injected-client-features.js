@@ -176,15 +176,51 @@ function ensureNativeSideChatPanel() {
         <div style="display:flex;align-items:center;gap:8px;">
             <span style="font-size:14px;">💬</span>
             <span style="font-size:12px;font-weight:600;color:#f3f4f6;letter-spacing:0.3px;">侧边对话</span>
-            <span style="font-size:10px;padding:1px 6px;border-radius:10px;background:rgba(34,197,94,0.15);color:#4ade80;font-weight:500;border:1px solid rgba(34,197,94,0.3);">原生引擎</span>
+            <span style="font-size:10px;padding:1px 6px;border-radius:10px;background:rgba(34,197,94,0.15);color:#4ade80;font-weight:500;border:1px solid rgba(34,197,94,0.3);">原生分屏</span>
         </div>
-        <div style="display:flex;align-items:center;gap:4px;">
-            <button id="agy-side-btn-new" title="新开会话" style="background:none;border:none;color:#94a3b8;cursor:pointer;padding:4px 6px;border-radius:4px;font-size:12px;display:flex;align-items:center;">➕</button>
-            <button id="agy-side-btn-reload" title="刷新页面" style="background:none;border:none;color:#94a3b8;cursor:pointer;padding:4px 6px;border-radius:4px;font-size:12px;display:flex;align-items:center;">🔄</button>
-            <button id="agy-side-btn-popout" title="弹出为独立系统窗口" style="background:none;border:none;color:#94a3b8;cursor:pointer;padding:4px 6px;border-radius:4px;font-size:12px;display:flex;align-items:center;">🗗</button>
-            <button id="agy-side-btn-close" title="收起侧对话 (Ctrl+Shift+S)" style="background:none;border:none;color:#94a3b8;cursor:pointer;padding:4px 6px;border-radius:4px;font-size:13px;display:flex;align-items:center;margin-left:4px;">✕</button>
+        <div style="display:flex;align-items:center;gap:6px;">
+            <button id="agy-side-btn-new" title="新开会话" style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.08);color:#cbd5e1;cursor:pointer;padding:3px 7px;border-radius:4px;font-size:11px;display:inline-flex;align-items:center;gap:4px;">➕ 新对话</button>
+            <button id="agy-side-btn-reload" title="刷新页面" style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.08);color:#cbd5e1;cursor:pointer;padding:3px 7px;border-radius:4px;font-size:11px;display:inline-flex;align-items:center;gap:4px;">🔄 刷新</button>
+            <button id="agy-side-btn-popout" title="弹出为独立系统窗口" style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.08);color:#cbd5e1;cursor:pointer;padding:3px 7px;border-radius:4px;font-size:11px;display:inline-flex;align-items:center;gap:4px;">🗗 独立窗口</button>
+            <button id="agy-side-btn-close" title="退出并收起侧边对话 (快捷键 Ctrl+Shift+S 或 Esc)" style="background:rgba(239,68,68,0.16);border:1px solid rgba(239,68,68,0.4);color:#fca5a5;cursor:pointer;padding:3px 10px;border-radius:4px;font-size:11px;font-weight:600;display:inline-flex;align-items:center;gap:4px;margin-left:4px;">✕ 退出侧栏</button>
         </div>
     `;
+
+    // 2.1 边缘快速折叠收起手柄 (Collapse Tab)
+    const collapseTab = document.createElement('div');
+    collapseTab.id = 'agy-side-collapse-tab';
+    collapseTab.title = '收起侧边对话 (Esc)';
+    collapseTab.style.position = 'absolute';
+    collapseTab.style.left = '-22px';
+    collapseTab.style.top = '44px';
+    collapseTab.style.width = '22px';
+    collapseTab.style.height = '36px';
+    collapseTab.style.background = '#27272a';
+    collapseTab.style.border = '1px solid rgba(255, 255, 255, 0.12)';
+    collapseTab.style.borderRight = 'none';
+    collapseTab.style.borderTopLeftRadius = '6px';
+    collapseTab.style.borderBottomLeftRadius = '6px';
+    collapseTab.style.cursor = 'pointer';
+    collapseTab.style.display = 'flex';
+    collapseTab.style.alignItems = 'center';
+    collapseTab.style.justifyContent = 'center';
+    collapseTab.style.color = '#94a3b8';
+    collapseTab.style.fontSize = '12px';
+    collapseTab.style.boxShadow = '-2px 2px 6px rgba(0,0,0,0.2)';
+    collapseTab.style.zIndex = '11';
+    collapseTab.innerHTML = '▶';
+    collapseTab.addEventListener('mouseenter', () => {
+        collapseTab.style.background = '#3f3f46';
+        collapseTab.style.color = '#f87171';
+    });
+    collapseTab.addEventListener('mouseleave', () => {
+        collapseTab.style.background = '#27272a';
+        collapseTab.style.color = '#94a3b8';
+    });
+    collapseTab.addEventListener('click', (e) => {
+        e.stopPropagation();
+        toggleNativeSideChat(false);
+    });
 
     // 3. 内容主体：内嵌原生 Antigravity 会话 Iframe
     const bodyContainer = document.createElement('div');
@@ -207,6 +243,15 @@ function ensureNativeSideChatPanel() {
         try {
             const iDoc = iframe.contentDocument || iframe.contentWindow?.document;
             if (iDoc) {
+                iDoc.addEventListener('keydown', (evt) => {
+                    if (evt.key === 'Escape') {
+                        toggleNativeSideChat(false);
+                    } else if (evt.ctrlKey && evt.shiftKey && (evt.key === 'S' || evt.key === 's')) {
+                        evt.preventDefault();
+                        toggleNativeSideChat(false);
+                    }
+                }, true);
+
                 const style = iDoc.createElement('style');
                 style.id = 'agy-side-embed-style';
                 style.textContent = `
@@ -234,6 +279,7 @@ function ensureNativeSideChatPanel() {
 
     bodyContainer.appendChild(iframe);
     panel.appendChild(resizer);
+    panel.appendChild(collapseTab);
     panel.appendChild(header);
     panel.appendChild(bodyContainer);
     document.body.appendChild(panel);
@@ -268,14 +314,27 @@ function ensureNativeSideChatPanel() {
     };
 
     header.querySelectorAll('button').forEach(btn => {
-        btn.addEventListener('mouseenter', () => {
-            btn.style.background = 'rgba(255, 255, 255, 0.08)';
-            btn.style.color = '#fff';
-        });
-        btn.addEventListener('mouseleave', () => {
-            btn.style.background = 'none';
-            btn.style.color = '#94a3b8';
-        });
+        if (btn.id === 'agy-side-btn-close') {
+            btn.addEventListener('mouseenter', () => {
+                btn.style.background = 'rgba(239, 68, 68, 0.32)';
+                btn.style.color = '#fff';
+                btn.style.borderColor = 'rgba(239, 68, 68, 0.7)';
+            });
+            btn.addEventListener('mouseleave', () => {
+                btn.style.background = 'rgba(239, 68, 68, 0.16)';
+                btn.style.color = '#fca5a5';
+                btn.style.borderColor = 'rgba(239, 68, 68, 0.4)';
+            });
+        } else {
+            btn.addEventListener('mouseenter', () => {
+                btn.style.background = 'rgba(255, 255, 255, 0.12)';
+                btn.style.color = '#fff';
+            });
+            btn.addEventListener('mouseleave', () => {
+                btn.style.background = 'rgba(255, 255, 255, 0.06)';
+                btn.style.color = '#cbd5e1';
+            });
+        }
     });
 
     return panel;
@@ -333,13 +392,17 @@ function updateSideChatButtonState(isOpen) {
     const btn = document.getElementById('agy-side-chat-btn');
     if (!btn) return;
     if (isOpen) {
-        btn.style.background = 'rgba(59, 130, 246, 0.18)';
-        btn.style.borderColor = 'rgba(59, 130, 246, 0.4)';
+        btn.style.background = 'rgba(59, 130, 246, 0.2)';
+        btn.style.borderColor = 'rgba(59, 130, 246, 0.5)';
         btn.style.color = '#60a5fa';
+        btn.innerHTML = '<span style="font-size: 13px;">✕</span><span>收起侧对话</span>';
+        btn.title = '收起侧边对话 (快捷键 Ctrl+Shift+S 或 Esc)';
     } else {
         btn.style.background = '';
         btn.style.borderColor = '';
         btn.style.color = '';
+        btn.innerHTML = '<span style="font-size: 13px;">💬</span><span>侧边对话</span>';
+        btn.title = '侧边对话 (快捷键 Ctrl+Shift+S) - 像 Codex 一样在当前窗口内原生分屏对话';
     }
 }
 
@@ -771,7 +834,9 @@ function sendTextToMainComposer(text) {
 
 window.addEventListener('keydown', (e) => {
     if (!agyIsTopWindow) return;
-    if (e.ctrlKey && e.shiftKey && (e.key === 'B' || e.key === 'b')) {
+    if (e.key === 'Escape' && agySideChatOpen) {
+        toggleNativeSideChat(false);
+    } else if (e.ctrlKey && e.shiftKey && (e.key === 'B' || e.key === 'b')) {
         e.preventDefault();
         openBranchModal();
     } else if (e.ctrlKey && e.shiftKey && (e.key === 'S' || e.key === 's')) {
